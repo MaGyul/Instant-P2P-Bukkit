@@ -1,0 +1,22 @@
+# P2P 기능 여부
+enabled: true
+# 목록에 표시될 서버 이름
+name: "Server"
+# 방 타이틀 (비워두면 기본 MOTD 1번째 라인을 씁니다)
+title: ""
+# 공개 여부
+publicRoom: true
+
+# 타겟을 할 모드 버전
+targetModVersion: 1.2.3
+
+# P2P 설정
+relayOnly: false
+allowBroadcast: false
+
+channels:
+  - "normal"
+channelAnd: false
+
+# 서버 고유 UUID (자동으로 채워집니다)
+serverUuid: ""

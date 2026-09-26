@@ -1,0 +1,7 @@
+name: instant-p2p-bukkit
+version: '${version}'
+
+loader: dev.magyul.instantp2p.InstantP2PLoader
+main: dev.magyul.instantp2p.InstantP2pBukkit
+api-version: '1.21.11'
+load: POSTWORLD
