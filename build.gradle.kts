@@ -14,7 +14,6 @@ val libdatachannelVersion = "0.24.1.1"
 dependencies {
     paperweight.paperDevBundle("1.21.11-R0.1-SNAPSHOT")
     compileOnly ("tel.schich:libdatachannel-java:${libdatachannelVersion}")
-    compileOnly ("tel.schich:libdatachannel-java-arch-detect:${libdatachannelVersion}")
 }
 
 java {

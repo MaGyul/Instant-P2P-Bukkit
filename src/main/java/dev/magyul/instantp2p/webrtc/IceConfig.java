@@ -1,12 +1,13 @@
 package dev.magyul.instantp2p.webrtc;
 
 import dev.magyul.instantp2p.InstantP2pBukkit;
-import dev.onvoid.webrtc.RTCConfiguration;
-import dev.onvoid.webrtc.RTCIceServer;
-import dev.onvoid.webrtc.RTCIceTransportPolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tel.schich.libdatachannel.PeerConnectionConfiguration;
+import tel.schich.libdatachannel.PeerConnectionConfiguration.IceTransportPolicy;
 
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -49,22 +50,26 @@ final class IceConfig {
 
     private static final Logger LOG = LoggerFactory.getLogger("instant-p2p-ice");
 
+    /**
+     * 우리 쪽 로컬 max-message-size. answer SDP의 a=max-message-size로 광고된다.
+     * 조인자(libwebrtc)는 최대 256KiB씩 보내므로 이보다 작으면 안 된다.
+     */
+    static final int LOCAL_MAX_MESSAGE_SIZE = BatchPipe.BATCH_MAX;
+
     private IceConfig() {}
 
     /**
-     * @param config     채워 넣을 RTCConfiguration
      * @param relays     시그널링 서버가 내려준 {url, username, credential} 목록 (없으면 빈 리스트)
      * @param tag        로그 태그 ("host" / "client")
      * @param allowRelay false면 TURN 후보를 아예 만들지 않는다 — "직결 우선 시도" 1단계용.
      *                    host/srflx 후보만 만들어지므로 릴레이 pair가 애초에 존재할 수 없다.
-     *                    {@link P2PConfig#isRelayOnly()}가 true면 이 값과 무관하게 강제로 릴레이 전용이 된다
-     *                    (사용자가 명시적으로 지정한 디버그 모드라 우선한다).
+     *                    relay-only 설정이면 이 값과 무관하게 강제로 릴레이 전용이 된다.
      */
-    static void apply(RTCConfiguration config, List<String[]> relays, String tag, boolean allowRelay) {
+    static PeerConnectionConfiguration build(List<String[]> relays, String tag, boolean allowRelay) {
         final boolean relayOnly = InstantP2pBukkit.INSTANCE.config.isRelayOnly();
         if (relayOnly) allowRelay = true;
 
-        List<RTCIceServer> chosen = new ArrayList<>();
+        List<URI> servers = new ArrayList<>();
         Set<String> urls = new LinkedHashSet<>();
         int droppedStun = 0;
         int droppedTurn = 0;
@@ -76,47 +81,65 @@ final class IceConfig {
                 if (relayOnly && !isTurnUrl) { droppedStun++; continue; }
                 if (!allowRelay && isTurnUrl) { droppedTurn++; continue; }
                 if (!urls.add(r[0])) continue;
-                RTCIceServer s = new RTCIceServer();
-                s.urls.add(r[0]);
-                addTcpFallback(s, r[0]);
-                if (r[1] != null) s.username = r[1];
-                if (r[2] != null) s.password = r[2];
-                chosen.add(s);
+                addServer(servers, r[0], r.length > 1 ? r[1] : null, r.length > 2 ? r[2] : null);
             }
         }
 
         // 서버 relay 가 없거나(=기본값 사용) relay-only 인데 TURN 이 안 내려온 경우
         boolean hasTurn = urls.stream().anyMatch(IceConfig::isTurn);
-        if (chosen.isEmpty() || (relayOnly && !hasTurn)) {
+        if (servers.isEmpty() || (relayOnly && !hasTurn)) {
             if (!relayOnly && urls.add(P2PConfig.STUN_URL)) {
-                RTCIceServer stun = new RTCIceServer();
-                stun.urls.add(P2PConfig.STUN_URL);
-                chosen.add(stun);
+                addServer(servers, P2PConfig.STUN_URL, null, null);
             }
             if (allowRelay && urls.add(P2PConfig.TURN_URL)) {
-                RTCIceServer turn = new RTCIceServer();
-                turn.urls.add(P2PConfig.TURN_URL);
-                addTcpFallback(turn, P2PConfig.TURN_URL);
-                turn.username = P2PConfig.TURN_USERNAME;
-                turn.password = P2PConfig.TURN_CREDENTIAL;
-                chosen.add(turn);
+                addServer(servers, P2PConfig.TURN_URL, P2PConfig.TURN_USERNAME, P2PConfig.TURN_CREDENTIAL);
             }
         }
 
-        config.iceServers.addAll(chosen);
+        PeerConnectionConfiguration config = PeerConnectionConfiguration.DEFAULT
+                .withIceServers(servers)
+                .withMaxMessageSize(LOCAL_MAX_MESSAGE_SIZE);
 
         if (relayOnly) {
-            config.iceTransportPolicy = RTCIceTransportPolicy.RELAY;
-            LOG.info("[{}] ICE relay-only mode: {} TURN server(s){}",
-                    tag, chosen.size(),
+            config = config.iceTransportPolicy(IceTransportPolicy.RTC_TRANSPORT_POLICY_RELAY);
+            LOG.info("[{}] ICE relay-only mode: {} server entr(ies){}",
+                    tag, servers.size(),
                     droppedStun > 0 ? " (" + droppedStun + " STUN entr(ies) dropped)" : "");
         } else if (!allowRelay) {
-            LOG.info("[{}] ICE direct-only mode: {} server(s){}",
-                    tag, chosen.size(),
+            LOG.info("[{}] ICE direct-only mode: {} server entr(ies){}",
+                    tag, servers.size(),
                     droppedTurn > 0 ? " (" + droppedTurn + " TURN entr(ies) dropped)" : "");
         } else {
-            LOG.info("[{}] ICE normal mode: {} server(s)", tag, chosen.size());
+            LOG.info("[{}] ICE normal mode: {} server entr(ies)", tag, servers.size());
         }
+        return config;
+    }
+
+    /**
+     * libdatachannel은 ICE 서버를 URL 하나로 받는다. TURN 자격 증명은 URL 안에 넣는다:
+     * {@code turn:USER:PASS@host:port?transport=tcp}. 사용자명/비밀번호는 libdatachannel이
+     * url_decode 하므로 예약 문자는 퍼센트 인코딩해서 넣는다.
+     * TURN이면 UDP 기본 URL과 함께 TCP fallback 항목도 추가한다(아래 addTcpFallback 설명 참고).
+     */
+    private static void addServer(List<URI> out, String url, String user, String pass) {
+        if (!isTurn(url)) {
+            out.add(URI.create(url));
+            return;
+        }
+        String withCred = withCredentials(url, user, pass);
+        out.add(URI.create(withCred));
+        String tcp = tcpFallback(withCred);
+        if (tcp != null) out.add(URI.create(tcp));
+    }
+
+    private static String withCredentials(String url, String user, String pass) {
+        if (user == null || user.isEmpty()) return url;
+        int colon = url.indexOf(':');               // "turn:" / "turns:"
+        String scheme = url.substring(0, colon + 1);
+        String rest = url.substring(colon + 1);
+        if (rest.startsWith("//")) rest = rest.substring(2);
+        if (rest.contains("@")) return url;         // 이미 자격 증명 포함
+        return scheme + pct(user) + ":" + pct(pass != null ? pass : "") + "@" + rest;
     }
 
     private static boolean isTurn(String url) {
@@ -132,10 +155,25 @@ final class IceConfig {
      * coturn이 정상 동작해도 relay 후보가 아예 안 잡힌다 — TCP 3478이 열려
      * 있으면(coturn 기본 동작) 이 fallback으로 우회할 수 있다.
      */
-    private static void addTcpFallback(RTCIceServer s, String url) {
-        if (!isTurn(url)) return;
+    private static String tcpFallback(String url) {
         String lower = url.toLowerCase();
-        if (lower.contains("transport=")) return; // 이미 명시된 경우 중복 추가 안 함
-        s.urls.add(url + (url.contains("?") ? "&" : "?") + "transport=tcp");
+        if (lower.contains("transport=")) return null; // 이미 명시된 경우 중복 추가 안 함
+        return url + (url.contains("?") ? "&" : "?") + "transport=tcp";
+    }
+
+    /** RFC 3986 unreserved 외 문자를 퍼센트 인코딩 (URLEncoder는 공백을 '+'로 바꿔서 안 씀). */
+    private static String pct(String s) {
+        StringBuilder sb = new StringBuilder();
+        for (byte b : s.getBytes(StandardCharsets.UTF_8)) {
+            int c = b & 0xFF;
+            if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
+                    || c == '-' || c == '.' || c == '_' || c == '~') {
+                sb.append((char) c);
+            } else {
+                sb.append('%').append(Character.toUpperCase(Character.forDigit(c >> 4, 16)))
+                        .append(Character.toUpperCase(Character.forDigit(c & 0xF, 16)));
+            }
+        }
+        return sb.toString();
     }
 }

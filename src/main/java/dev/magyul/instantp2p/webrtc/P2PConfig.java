@@ -69,6 +69,10 @@ public class P2PConfig {
         return config.getString("title", "");
     }
 
+    public String getNativeLogLevel() {
+        return config.getString("nativeLogLevel");
+    }
+
     public boolean isPublicRoom() {
         return config.getBoolean("publicRoom", true);
     }

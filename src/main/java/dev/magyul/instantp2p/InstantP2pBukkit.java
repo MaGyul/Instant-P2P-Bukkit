@@ -10,7 +10,6 @@ import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import tel.schich.libdatachannel.LibDataChannelArchDetect;
 
 import java.util.Collection;
 import java.util.UUID;
@@ -57,8 +56,6 @@ public final class InstantP2pBukkit extends JavaPlugin {
             Bukkit.getPluginManager().disablePlugin(this);
             return;
         }
-
-        LibDataChannelArchDetect.initialize();
 
         Bukkit.getPluginManager().registerEvents(new InstantP2pListener(), this);
 

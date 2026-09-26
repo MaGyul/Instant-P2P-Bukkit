@@ -20,3 +20,6 @@ channelAnd: false
 
 # 서버 고유 UUID (자동으로 채워집니다)
 serverUuid: ""
+
+# 네이티브 로그의 출력 단계 설정 (INFO, WARN, ERROR, DEBUG)
+nativeLogLevel: WARN

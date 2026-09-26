@@ -3,13 +3,16 @@ package dev.magyul.instantp2p.webrtc;
 import dev.magyul.instantp2p.InstantP2pBukkit;
 import dev.magyul.instantp2p.Utils;
 import dev.magyul.instantp2p.tunnel.TunnelRegistry;
-import dev.onvoid.webrtc.*;
-import dev.onvoid.webrtc.media.audio.AudioDeviceModule;
-import dev.onvoid.webrtc.media.audio.AudioLayer;
 import org.bukkit.Bukkit;
 import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tel.schich.libdatachannel.DataChannel;
+import tel.schich.libdatachannel.DataChannelCallback;
+import tel.schich.libdatachannel.IceState;
+import tel.schich.libdatachannel.PeerConnection;
+import tel.schich.libdatachannel.PeerConnectionConfiguration;
+import tel.schich.libdatachannel.SessionDescriptionType;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -68,8 +71,6 @@ public class WebRtcHost {
     private final int    targetPort;
 
     private final AtomicBoolean running = new AtomicBoolean(false);
-    private volatile AudioDeviceModule audioModule;
-    private volatile PeerConnectionFactory factory;
     private volatile WebSocketClient lobbyWs;
 
     /** sid → 진행 중인 페어 시그널링 */
@@ -88,6 +89,14 @@ public class WebRtcHost {
     private final ExecutorService worker =
             Executors.newCachedThreadPool(r -> {
                 Thread t = new Thread(r, "webrtc-host-worker");
+                t.setDaemon(true);
+                return t;
+            });
+
+    /** PeerConnection/DataChannel 네이티브 정리 전용 (releaseNative 참고) */
+    private final ExecutorService nativeCloser =
+            Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "webrtc-host-closer");
                 t.setDaemon(true);
                 return t;
             });
@@ -111,9 +120,7 @@ public class WebRtcHost {
     /** 로비 접속 시작. 접속/재접속은 백그라운드에서 진행되며 즉시 반환. */
     public void start() {
         if (!running.compareAndSet(false, true)) return;
-        // DataChannel 전용 — dummy audio로 오디오 장치 초기화 생략 (장치 없는 환경 크래시 방지)
-        audioModule = new AudioDeviceModule(AudioLayer.kDummyAudio);
-        factory = new PeerConnectionFactory(audioModule);
+        // libdatachannel 네이티브는 WebRtcBridge.ensureNativeLoaded()에서 한 번만 로드한다.
         LOG.info("[host] WebRTC Host: room={} target={}:{}", roomId, targetHost, targetPort);
         worker.execute(this::connectLobby);
     }
@@ -128,15 +135,14 @@ public class WebRtcHost {
         if (ws != null) ws.close();
         scheduler.shutdownNow();
         worker.shutdownNow();
-        PeerConnectionFactory f = factory;
-        factory = null;
-        if (f != null) {
-            try { f.dispose(); } catch (Exception ignored) {}
-        }
-        AudioDeviceModule adm = audioModule;
-        audioModule = null;
-        if (adm != null) {
-            try { adm.dispose(); } catch (Exception ignored) {}
+        // 세션들이 넘긴 네이티브 정리를 마저 끝낸다 (서버 종료 시 PeerConnection 누수 방지)
+        nativeCloser.shutdown();
+        try {
+            if (!nativeCloser.awaitTermination(3, TimeUnit.SECONDS)) {
+                LOG.warn("[host] native cleanup did not finish in time");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
     }
 
@@ -338,16 +344,10 @@ public class WebRtcHost {
      *                    OFFER에 맞춰 이쪽도 같은 단계로 맞춰야 릴레이 pair가 안 생긴다.
      *                    {@link PairSignal#handlePair} 참고.
      */
-    private RTCConfiguration buildConfig(boolean allowRelay) {
-        RTCConfiguration config = new RTCConfiguration();
-        // ICE 서버 구성 (relay-only 여부는 P2PConfig.isRelayOnly())
-        IceConfig.apply(config, serverRelays, "host", allowRelay);
-        // 디버그/특수 네트워크 환경용: any-address 포트 강제 (-Dkfcudp.ice.anyaddress=true)
-        if (Boolean.getBoolean("kfcudp.ice.anyaddress")) {
-            config.portAllocatorConfig.setDisableAdapterEnumeration(true);
-            config.portAllocatorConfig.setEnableAnyAddressPorts(true);
-        }
-        return config;
+    private PeerConnectionConfiguration buildConfig(boolean allowRelay) {
+        // ICE 서버 구성 (relay-only 여부는 config.isRelayOnly())
+        // webrtc-java 시절의 -Dkfcudp.ice.anyaddress(portAllocatorConfig)는 libdatachannel에 대응 옵션이 없다.
+        return IceConfig.build(serverRelays, "host", allowRelay);
     }
 
     // ── 페어 세션 (조인자별 1:1 시그널링) ────────────────────────────────────
@@ -460,7 +460,7 @@ public class WebRtcHost {
                 if (spd == null) return;
                 HostSession s = session;
                 if (s != null) {
-                    s.addRemoteIce(new RTCIceCandidate(mid != null ? mid : "0", 0, spd));
+                    s.addRemoteIce(spd, mid != null ? mid : "0");
                 }
             }
         }
@@ -506,8 +506,8 @@ public class WebRtcHost {
         private final String clientIp;
         private final AtomicBoolean closed = new AtomicBoolean(false);
 
-        private volatile RTCPeerConnection peerConnection;
-        private volatile RTCDataChannel    dataChannel;
+        private volatile PeerConnection    peerConnection;
+        private volatile DataChannel       dataChannel;
         private volatile SocketChannel     tcpChannel;
         private volatile BatchPipe.Writer  tcpWriter;
         private volatile int               tunnelLocalPort = -1;
@@ -515,11 +515,22 @@ public class WebRtcHost {
 
         private final CountDownLatch dcOpenLatch = new CountDownLatch(1);
         private final Object dialLock = new Object();
-        /** 백프레셔 대기/웨이크업 (onBufferedAmountChange 이벤트 기반) */
+        /** 백프레셔 대기/웨이크업 (onBufferedAmountLow 이벤트 기반) */
         private final Object bpLock = new Object();
 
-        private final List<RTCIceCandidate> queuedIce = new ArrayList<>();
+        /** remote description 적용 전에 도착한 후보 {candidate, mid} */
+        private final List<String[]> queuedIce = new ArrayList<>();
         private volatile boolean remoteSet = false;
+
+        /** DataChannel open 처리를 한 번만 하기 위한 플래그 (onOpen/isOpen 양쪽에서 들어올 수 있음) */
+        private final AtomicBoolean openHandled = new AtomicBoolean(false);
+        /** 이 세션이 TURN 후보를 쓸 수 있었는지 — relay 판별에 쓴다 */
+        private volatile boolean allowRelay;
+        /** 협상된 원격 max-message-size와 BATCH_MAX 중 작은 값. open 시점에 확정. */
+        private volatile int maxSendSize = BatchPipe.BATCH_MAX;
+        private final WebRtcStats.RelayTracker relayTracker = new WebRtcStats.RelayTracker();
+        /** 터널 등록 전에 relay 판별이 끝났을 수 있어 결과를 들고 있다가 등록 시 반영한다 */
+        private volatile Boolean relayResult;
 
         // 버킷용으로 추가
         private volatile TunnelRegistry.Tunnel tunnel;
@@ -530,45 +541,61 @@ public class WebRtcHost {
             this.clientIp = pair.clientIp;
         }
 
+        /*
+         * 콜백 스레드 주의 (libdatachannel-java):
+         *  - createPeer(config)의 기본 executor는 Runnable::run이라 모든 콜백이 libdatachannel
+         *    네이티브 스레드에서 인라인으로 실행된다. 스레드 풀 executor로 바꾸지 말 것 —
+         *    onMessage 순서가 뒤섞여 MC 스트림이 깨지고, 아래 수신 버퍼가 해제된 뒤 읽히게 된다.
+         *  - 콜백 안에서 PeerConnection/DataChannel.close()를 직접 부르지 않는다. close()는
+         *    진행 중인 콜백이 끝나길 기다리므로 네이티브 정리는 nativeCloser로 넘긴다.
+         */
         void begin(String offerSdp, boolean allowRelay) {
-            peerConnection = factory.createPeerConnection(buildConfig(allowRelay), new PeerConnectionObserver() {
-                @Override
-                public void onIceCandidate(RTCIceCandidate candidate) {
-                    pair.send(VillasMsg.candidate(candidate.sdp,
-                            candidate.sdpMid != null ? candidate.sdpMid : "0"));
-                }
+            this.allowRelay = allowRelay;
+            PeerConnection pc = PeerConnection.createPeer(buildConfig(allowRelay));
+            peerConnection = pc;
 
-                @Override
-                public void onIceConnectionChange(RTCIceConnectionState state) {
-                    // FAILED에서만 종료, DISCONNECTED는 자동 복구 대기
-                    if (state == RTCIceConnectionState.FAILED) {
-                        LOG.warn("[host] ICE failed sid={} (allowRelay={})", sid, allowRelay);
-                        onAttemptFailed(allowRelay);
-                    } else if (state == RTCIceConnectionState.DISCONNECTED) {
-                        LOG.warn("[host] ICE disconnected sid={}, waiting for reconnect...", sid);
-                    }
-                }
+            // answer는 setRemoteDescription(offer) 후 자동 협상으로 만들어져 이 콜백으로 온다.
+            // (webrtc-java의 createAnswer/setLocalDescription 단계가 없다)
+            pc.onLocalDescription.register((p, sdp, type) -> {
+                if (closed.get() || type != SessionDescriptionType.ANSWER) return;
+                pair.send(VillasMsg.description("answer", sdp));
+                LOG.info("[host] ANSWER sent sid={}", sid);
+            });
 
-                @Override
-                public void onDataChannel(RTCDataChannel channel) {
-                    LOG.info("[host] DataChannel attached sid={} label={}", sid, channel.getLabel());
-                    dataChannel = channel;
-                    setupDataChannel(channel);
+            pc.onLocalCandidate.register((p, candidate, mid) -> {
+                if (closed.get()) return;
+                // libwebrtc(조인자)가 보내는 형식과 맞춘다: "a=" 없이 "candidate:..."
+                String c = candidate.startsWith("a=") ? candidate.substring(2) : candidate;
+                relayTracker.observe(c);
+                pair.send(VillasMsg.candidate(c, mid != null && !mid.isEmpty() ? mid : "0"));
+            });
+
+            pc.onIceStateChange.register((p, state) -> {
+                if (closed.get()) return;
+                // FAILED에서만 종료, DISCONNECTED는 자동 복구 대기
+                if (state == IceState.RTC_ICE_FAILED) {
+                    LOG.warn("[host] ICE failed sid={} (allowRelay={})", sid, allowRelay);
+                    onAttemptFailed(allowRelay);
+                } else if (state == IceState.RTC_ICE_DISCONNECTED) {
+                    LOG.warn("[host] ICE disconnected sid={}, waiting for reconnect...", sid);
                 }
             });
 
-            peerConnection.setRemoteDescription(
-                    new RTCSessionDescription(RTCSdpType.OFFER, offerSdp),
-                    new SetSessionDescriptionObserver() {
-                        @Override public void onSuccess() {
-                            flushQueuedIce();
-                            createAnswer();
-                        }
-                        @Override public void onFailure(String error) {
-                            LOG.warn("[host] setRemoteDescription failed sid={}: {}", sid, error);
-                            pair.close();
-                        }
-                    });
+            pc.onDataChannel.register((p, channel) -> {
+                if (closed.get()) return;
+                LOG.info("[host] DataChannel attached sid={} label={}", sid, channel.label());
+                dataChannel = channel;
+                setupDataChannel(channel);
+            });
+
+            try {
+                pc.setRemoteDescription(offerSdp, SessionDescriptionType.OFFER);
+            } catch (Exception e) {
+                LOG.warn("[host] setRemoteDescription failed sid={}: {}", sid, e.toString());
+                pair.close();
+                return;
+            }
+            flushQueuedIce();
 
             try {
                 scheduler.schedule(() -> {
@@ -606,134 +633,113 @@ public class WebRtcHost {
         }
 
         /**
-         * 직결(Direct)/중계(TURN) 여부를 기록해 둔다 — 이 시점엔 아직 로그인 전이라 UUID를
-         * 모르므로 IP로 등록해 두고, PlayerJoinMessageMixin이 참여 메시지에 접미사로 붙인다.
-         * 조인자 본인 화면에는 KfcudpClient가 월드 진입 시점에 따로 띄운다.
-         * <p>
-         * DataChannel open은 ICE가 "connected"만 되면 도달하고 그 뒤로도 nominated pair가
-         * 바뀔 수 있어(WebRtcClient.resolveConnectionType 클래스 주석 참고) 여기서 한 번
-         * 읽고 조금 있다가 한 번 더 읽어서 값이 바뀌면 덮어쓴다 — 접속자가 실제로 로그인을
-         * 마치고 참여 메시지가 뜨기까지는 이보다 더 걸리므로 이 지연은 그 전에 끝난다.
+         * 직결(Direct)/중계(TURN) 여부를 기록해 둔다. open 직후 한 번, 2초 뒤 한 번 더 읽어서
+         * 값이 바뀌면 덮어쓴다 (선택된 경로는 open 이후에도 바뀔 수 있다).
+         * open 시점엔 아직 터널이 없을 수 있어(터널은 첫 데이터 수신 때 생긴다) 결과를
+         * relayResult에 들고 있다가 등록 시 반영한다 — applyRelay 참고.
          */
         private void notifyConnectionType() {
-            RTCPeerConnection pc = peerConnection;
-            if (pc == null) return;
-            pc.getStats(report -> {
-                Boolean relay = WebRtcStats.usesRelay(report);
-                if (relay != null && tunnel != null) {
-                    TUNNEL_REGISTRY.setRelay(tunnel, relay);
-                    LOG.info("[host] connection type (initial) sid={}: relay={}", sid, relay);
-                }
-            });
-            // 접속마다 2초 자고 끝나는 스레드를 새로 만들지 않고 기존 타이머에 예약한다.
+            Boolean relay = relayTracker.usesRelay(peerConnection, allowRelay);
+            if (relay != null) {
+                applyRelay(relay);
+                LOG.info("[host] connection type (initial) sid={}: relay={}", sid, relay);
+            }
             try {
                 scheduler.schedule(() -> {
-                    RTCPeerConnection pc2 = peerConnection;
-                    if (pc2 == null) return;
-                    pc2.getStats(report -> {
-                        Boolean recheck = WebRtcStats.usesRelay(report);
-                        if (recheck != null) {
-                            Boolean prev = tunnel.usesRelay();//P2PBanManager.connectionTypeOfIp(clientIp);
-                            if (!recheck.equals(prev)) {
-                                LOG.warn("[host] connection type changed on recheck sid={}: {} -> {}", sid, prev, recheck);
-                            }
-                            TUNNEL_REGISTRY.setRelay(tunnel, recheck);
-                            //P2PBanManager.registerConnectionType(clientIp, recheck);
-                        }
-                    });
+                    if (closed.get()) return;
+                    Boolean recheck = relayTracker.usesRelay(peerConnection, allowRelay);
+                    if (recheck == null) return;
+                    Boolean prev = relayResult;
+                    if (prev != null && !recheck.equals(prev)) {
+                        LOG.warn("[host] connection type changed on recheck sid={}: {} -> {}", sid, prev, recheck);
+                    }
+                    applyRelay(recheck);
                 }, 2, TimeUnit.SECONDS);
             } catch (RejectedExecutionException ignored) {}
         }
 
-        private void createAnswer() {
-            RTCPeerConnection pc = peerConnection;
-            if (pc == null) return;
-            pc.createAnswer(new RTCAnswerOptions(), new CreateSessionDescriptionObserver() {
-                @Override
-                public void onSuccess(RTCSessionDescription desc) {
-                    pc.setLocalDescription(desc, new SetSessionDescriptionObserver() {
-                        @Override public void onSuccess() {
-                            pair.send(VillasMsg.description("answer", desc.sdp));
-                            LOG.info("[host] ANSWER sent sid={}", sid);
-                        }
-                        @Override public void onFailure(String error) {
-                            LOG.warn("[host] setLocalDescription failed sid={}: {}", sid, error);
-                            pair.close();
-                        }
-                    });
-                }
-                @Override public void onFailure(String error) {
-                    LOG.warn("[host] createAnswer failed sid={}: {}", sid, error);
-                    pair.close();
-                }
-            });
+        private void applyRelay(boolean relay) {
+            relayResult = relay;
+            TunnelRegistry.Tunnel t = tunnel;
+            if (t != null) TUNNEL_REGISTRY.setRelay(t, relay);
         }
 
-        void addRemoteIce(RTCIceCandidate candidate) {
+        void addRemoteIce(String candidate, String mid) {
+            relayTracker.observe(candidate);
             synchronized (queuedIce) {
                 if (!remoteSet) {
-                    queuedIce.add(candidate);
+                    queuedIce.add(new String[]{candidate, mid});
                     return;
                 }
             }
-            RTCPeerConnection pc = peerConnection;
-            if (pc != null) pc.addIceCandidate(candidate);
+            applyRemoteIce(candidate, mid);
         }
 
         private void flushQueuedIce() {
-            List<RTCIceCandidate> toApply;
+            List<String[]> toApply;
             synchronized (queuedIce) {
                 remoteSet = true;
                 toApply = new ArrayList<>(queuedIce);
                 queuedIce.clear();
             }
-            RTCPeerConnection pc = peerConnection;
-            if (pc == null) return;
-            for (RTCIceCandidate c : toApply) pc.addIceCandidate(c);
+            for (String[] c : toApply) applyRemoteIce(c[0], c[1]);
+        }
+
+        private void applyRemoteIce(String candidate, String mid) {
+            PeerConnection pc = peerConnection;
+            if (pc == null || closed.get()) return;
+            try {
+                pc.addRemoteCandidate(candidate, mid);
+            } catch (Exception e) {
+                // 해석 못 하는 후보(mDNS .local 등)는 하나 빠져도 나머지로 연결된다
+                LOG.debug("[host] remote candidate rejected sid={}: {} ({})", sid, candidate, e.toString());
+            }
         }
 
         // ── 데이터 파이프 ─────────────────────────────────────────────────
 
-        private void setupDataChannel(RTCDataChannel channel) {
-            channel.registerObserver(new RTCDataChannelObserver() {
-                @Override
-                public void onBufferedAmountChange(long previousAmount) {
-                    // 하강 에지에서만 웨이크업 (콜백은 모든 변화마다 오므로 조건 최소화)
-                    if (previousAmount > DC_BUF_LOW) {
-                        RTCDataChannel ch = dataChannel;
-                        if (ch != null && ch.getBufferedAmount() <= DC_BUF_LOW) {
-                            synchronized (bpLock) { bpLock.notifyAll(); }
-                        }
-                    }
-                }
-
-                @Override
-                public void onStateChange() {
-                    RTCDataChannelState state = channel.getState();
-                    if (state == RTCDataChannelState.OPEN) {
-                        dcOpened = true;
-                        dcOpenLatch.countDown();
-                        notifyConnectionType();
-                        LOG.info("[host] DataChannel open; waiting for first data sid={}", sid);
-                    } else if (state == RTCDataChannelState.CLOSED) {
-                        LOG.info("[host] DataChannel closed sid={}", sid);
-                        pair.close();
-                    }
-                }
-
-                @Override
-                public void onMessage(RTCDataChannelBuffer buffer) {
-                    onPeerData(buffer.data);
-                }
-            });
-            if (channel.getState() == RTCDataChannelState.OPEN) {
-                dcOpened = true;
-                dcOpenLatch.countDown();
-                notifyConnectionType();
+        private void setupDataChannel(DataChannel channel) {
+            try {
+                channel.bufferedAmountLowThreshold((int) DC_BUF_LOW);
+            } catch (Exception e) {
+                LOG.warn("[host] bufferedAmountLowThreshold failed sid={}: {}", sid, e.toString());
             }
+            // 하강 에지(threshold 초과 → 이하)에서만 불린다
+            channel.onBufferedAmountLow.register(c -> {
+                synchronized (bpLock) { bpLock.notifyAll(); }
+            });
+            channel.onOpen.register(this::onChannelOpen);
+            channel.onClosed.register(c -> {
+                LOG.info("[host] DataChannel closed sid={}", sid);
+                pair.close();
+            });
+            channel.onError.register((c, error) -> {
+                LOG.warn("[host] DataChannel error sid={}: {}", sid, error);
+                pair.close();
+            });
+            // 수신 버퍼는 네이티브 메모리를 그대로 감싼 것이라 이 콜백이 끝나면 해제된다.
+            // onPeerData → BatchPipe.Writer.feed()가 콜백 안에서 동기적으로 청크에 복사하므로 안전하다.
+            // (버퍼 참조를 큐에 넣거나 다른 스레드로 넘기는 구조로 바꾸면 안 된다)
+            channel.onMessage.register(DataChannelCallback.Message.handleBinary((c, buffer) -> onPeerData(buffer)));
+
+            // 원격이 만든 채널은 콜백 시점에 이미 open일 수 있다
+            if (channel.isOpen()) onChannelOpen(channel);
         }
 
-        private void onPeerData(java.nio.ByteBuffer data) {
+        private void onChannelOpen(DataChannel channel) {
+            if (closed.get() || !openHandled.compareAndSet(false, true)) return;
+            try {
+                maxSendSize = Math.max(1, Math.min(BatchPipe.BATCH_MAX, channel.maxMessageSize()));
+            } catch (Exception e) {
+                maxSendSize = 64 * 1024; // 협상값을 못 읽으면 SDP 미기재 시 기본값으로 보수적으로
+            }
+            dcOpened = true;
+            dcOpenLatch.countDown();
+            notifyConnectionType();
+            LOG.info("[host] DataChannel open; waiting for first data sid={} (maxMessageSize={})", sid, maxSendSize);
+        }
+
+        private void onPeerData(ByteBuffer data) {
             if (closed.get()) return;
             BatchPipe.Writer w = tcpWriter;
             if (w == null) {
@@ -749,12 +755,13 @@ public class WebRtcHost {
                             sock.setOption(StandardSocketOptions.SO_RCVBUF, 512 * 1024);
                             sock.setOption(StandardSocketOptions.SO_SNDBUF, 512 * 1024);
                             tcpChannel = sock;
-                            // MC 서버는 이 소켓의 로컬 포트를 조인자의 "IP:포트"로 본다.
-                            // (전부 127.0.0.1 이므로) 실제 원격 IP를 포트에 매핑해 둔다.
+                            // MC 서버는 이 소켓의 로컬 주소를 조인자의 "IP:포트"로 본다.
+                            // 실제 원격 식별자를 레지스트리에 매핑해 둔다 (TunnelInjector가 교체).
                             tunnelLocalPort =
                                     ((InetSocketAddress) sock.getLocalAddress()).getPort();
                             this.tunnel = TUNNEL_REGISTRY.register(sock.getLocalAddress(), this.clientIp, this.sid);
-//                            P2PBanManager.registerTunnelPort(tunnelLocalPort, clientIp);
+                            Boolean r = relayResult;
+                            if (r != null) TUNNEL_REGISTRY.setRelay(this.tunnel, r);
                             // DC→TCP: 전담 writer 스레드가 연속 청크를 writev 1회로 배칭
                             w = new BatchPipe.Writer(sock,
                                     "webrtc-host-tcpw-" + sid,
@@ -772,8 +779,6 @@ public class WebRtcHost {
                         } catch (Exception e) {
                             LOG.warn("[host] Failed to dial target {}:{}: {}",
                                     targetHost, targetPort, e.getMessage());
-                            // dcOpened 이후 유일한 미통보 실패 경로였다 — 다른 실패 지점
-                            // (ICE FAILED, handshake timeout)과 동일하게 알려준다.
                             notifyHostFailure();
                             pair.close();
                             return;
@@ -782,7 +787,7 @@ public class WebRtcHost {
                 }
             }
             try {
-                w.feed(data); // 큐 가득 시 블로킹 → SCTP 수신 윈도우로 배압
+                w.feed(data); // 동기 복사. 큐 가득 시 블로킹 → SCTP 수신 윈도우로 배압
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 pair.close();
@@ -791,9 +796,6 @@ public class WebRtcHost {
 
         /** MC 서버 TCP → DataChannel. direct 버퍼 직접 read + 백프레셔. */
         private void forwardTcpToWebRtc(SocketChannel sock) {
-            // direct 버퍼로 직접 read — 예전의 힙 byte[] → direct 복사 단계가 사라진다.
-            // 블로킹 read는 OS 버퍼에 있는 만큼을 용량까지 한 번에 채우므로
-            // 별도의 coalesce(available 기반 추가 흡수)도 필요 없다.
             ByteBuffer buf = ByteBuffer.allocateDirect(BatchPipe.BATCH_MAX);
             try {
                 while (true) {
@@ -802,25 +804,31 @@ public class WebRtcHost {
                     if (n < 0) break;   // EOF
                     if (n == 0) continue;
 
-                    RTCDataChannel ch = dataChannel;
-                    if (ch == null || ch.getState() != RTCDataChannelState.OPEN) break;
+                    DataChannel ch = dataChannel;
+                    if (ch == null || closed.get() || !ch.isOpen()) break;
 
-                    // 이벤트 기반 백프레셔: onBufferedAmountChange가 깨움 (50ms 안전 타임아웃)
-                    while (ch.getBufferedAmount() > DC_BUF_HIGH) {
-                        if (closed.get() || ch.getState() != RTCDataChannelState.OPEN) return;
+                    // 이벤트 기반 백프레셔: onBufferedAmountLow가 깨움 (50ms 안전 타임아웃)
+                    while (ch.bufferedAmount() > DC_BUF_HIGH) {
+                        if (closed.get() || !ch.isOpen()) return;
                         synchronized (bpLock) {
-                            if (ch.getBufferedAmount() > DC_BUF_HIGH) bpLock.wait(50);
+                            if (ch.bufferedAmount() > DC_BUF_HIGH) bpLock.wait(50);
                         }
                     }
                     if (closed.get()) break;
 
-                    // slice()는 필수다. RTCDataChannelBuffer는 JNI로 넘어가고
-                    // GetDirectBufferAddress/GetDirectBufferCapacity는 position/limit을
-                    // 무시하고 capacity 전체를 읽는다. slice()만이 "시작 주소 = 현재
-                    // position, capacity = 유효 길이"인 뷰를 만들어 준다.
-                    // 이걸 빼면 유효 데이터 뒤에 버퍼 잔여분까지 전송돼 스트림이 깨진다.
+                    // sendMessage(ByteBuffer)는 position~limit 구간을 보내고 호출 중에 네이티브로
+                    // 복사한다 (webrtc-java처럼 slice()할 필요 없음). 버퍼 위치는 움직이지 않으므로
+                    // 직접 넘긴다. 원격 max-message-size를 넘지 않게 잘라서 보낸다.
                     buf.flip();
-                    ch.send(new RTCDataChannelBuffer(buf.slice(), true));
+                    final int end = buf.limit();
+                    final int max = maxSendSize;
+                    while (buf.position() < end) {
+                        int next = Math.min(end, buf.position() + max);
+                        buf.limit(next);
+                        ch.sendMessage(buf);
+                        buf.position(next);
+                        buf.limit(end);
+                    }
                 }
             } catch (Exception e) {
                 if (!closed.get()) LOG.warn("[host] TCP read ended sid={}: {}", sid, e.getMessage());
@@ -839,24 +847,48 @@ public class WebRtcHost {
             if (tunnelLocalPort > 0) {
                 TUNNEL_REGISTRY.unregister(tunnel);
                 this.tunnel = null;
-//                P2PBanManager.unregisterTunnelPort(tunnelLocalPort);
                 tunnelLocalPort = -1;
             }
             try { if (tcpChannel != null) tcpChannel.close(); } catch (Exception ignored) {}
-            RTCDataChannel dc = dataChannel;
+
+            DataChannel dc = dataChannel;
             dataChannel = null;
-            if (dc != null) {
-                try {
-                    dc.unregisterObserver();
-                    dc.close();
-                    dc.dispose();
-                } catch (Exception ignored) {}
-            }
-            RTCPeerConnection pc = peerConnection;
+            PeerConnection pc = peerConnection;
             peerConnection = null;
+            releaseNative(dc, pc);
+        }
+    }
+
+    /**
+     * 네이티브 정리는 전용 스레드에서 한다. close()는 진행 중인 콜백이 끝나길 기다리는데,
+     * 우리 close 경로는 그 콜백 안(onClosed/onError/onIceStateChange)에서 시작되는 경우가 많다.
+     */
+    private void releaseNative(DataChannel dc, PeerConnection pc) {
+        if (dc == null && pc == null) return;
+        Runnable r = () -> {
+            // libdatachannel-java의 close()는 핸들을 먼저 지우고 나서 콜백을 해제하려다
+            // "ID does not exist" 에러를 찍는다. 핸들이 살아 있을 때 먼저 비워둔다.
+            if (dc != null) {
+                quietly(dc.onOpen::deregisterAll, dc.onClosed::deregisterAll, dc.onError::deregisterAll,
+                        dc.onMessage::deregisterAll, dc.onBufferedAmountLow::deregisterAll);
+                try { dc.close(); } catch (Exception ignored) {}
+            }
             if (pc != null) {
+                quietly(pc.onLocalDescription::deregisterAll, pc.onLocalCandidate::deregisterAll,
+                        pc.onIceStateChange::deregisterAll, pc.onDataChannel::deregisterAll);
                 try { pc.close(); } catch (Exception ignored) {}
             }
+        };
+        try {
+            nativeCloser.execute(r);
+        } catch (RejectedExecutionException e) {
+            r.run();
+        }
+    }
+
+    private static void quietly(Runnable... actions) {
+        for (Runnable a : actions) {
+            try { a.run(); } catch (Exception ignored) {}
         }
     }
 }
