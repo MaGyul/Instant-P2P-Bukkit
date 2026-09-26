@@ -1,5 +1,6 @@
 package dev.magyul.instantp2p;
 
+import dev.magyul.instantp2p.i18n.I18n;
 import dev.magyul.instantp2p.network.P2PNet;
 import dev.magyul.instantp2p.webrtc.ExpelManager;
 import dev.magyul.instantp2p.webrtc.Roles;
@@ -24,7 +25,7 @@ public class InstantP2pListener implements Listener {
                 () -> P2PNet.broadcastRoomState(Bukkit.getServer())));
         if (ExpelManager.isExpelled(event.getUniqueId())) {
             event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
-                    Component.translatable("instant-p2p.msg.still_expelled"));
+                    Component.translatable("instant-p2p.msg.still_expelled", I18n.fallback("instant-p2p.msg.still_expelled")));
         }
     }
 
@@ -43,7 +44,7 @@ public class InstantP2pListener implements Listener {
             String key = Boolean.TRUE.equals(relay)
                     ? "instant-p2p.msg.join_suffix_relay"
                     : "instant-p2p.msg.join_suffix_direct";
-            event.joinMessage(joinMessage.appendSpace().append(Component.translatable(key)));
+            event.joinMessage(joinMessage.appendSpace().append(Component.translatable(key, I18n.fallback(key))));
         });
         P2PNet.broadcastRoomState(p.getServer());
         InstantP2pBukkit.INSTANCE.onlinePlayers.add(p.getUniqueId());
@@ -54,10 +55,11 @@ public class InstantP2pListener implements Listener {
     public void onQuit(PlayerQuitEvent event) {
         Player p = event.getPlayer();
         TUNNEL_REGISTRY.unbindPlayer(p.getUniqueId());
-        P2PNet.broadcastRoomState(p.getServer());
         ExpelManager.onDisconnect(p.getServer(), p);
         InstantP2pBukkit.INSTANCE.onlinePlayers.remove(p.getUniqueId());
-        Bukkit.getScheduler().runTask(InstantP2pBukkit.INSTANCE, () ->
-            WebRtcBridge.updatePublicRoomPlayerCount(Bukkit.getOnlinePlayers().size(), Bukkit.getMaxPlayers()));
+        Bukkit.getScheduler().runTask(InstantP2pBukkit.INSTANCE, () -> {
+            P2PNet.broadcastRoomState(p.getServer());
+            WebRtcBridge.updatePublicRoomPlayerCount(Bukkit.getOnlinePlayers().size(), Bukkit.getMaxPlayers());
+        });
     }
 }

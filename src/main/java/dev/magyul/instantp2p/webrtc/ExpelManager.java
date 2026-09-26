@@ -69,8 +69,8 @@ public final class ExpelManager {
     private ExpelManager() {}
 
     private static boolean isHost(Player target) {
-        UUID serverUUID = InstantP2pBukkit.INSTANCE.config.getServerUUID();
-        return target.getUniqueId() == serverUUID || target.hasPermission("instentp2p.host");
+        return target.getUniqueId().equals(InstantP2pBukkit.INSTANCE.config.getServerUUID())
+                || target.hasPermission("instantp2p.host");
     }
 
     /** 개발자 3 &gt; 서포터 2 &gt; 방송인 1 &gt; 무등급 0. 역할 판정·우선순위는 DevBadge.roleSuffix
@@ -146,7 +146,7 @@ public final class ExpelManager {
      * (BlockedPlayersScreen 3번째 버튼, "물갈이"용). 방장은 추방과 같은 이유로 대상에서 제외. */
     private static void kick(UUID kickerUuid, UUID targetUuid, Server server) {
         Player target = server.getPlayer(targetUuid);
-        if (target == null) return;
+        if (target == null || isHost(target)) return;
         Player kicker = server.getPlayer(kickerUuid);
         target.kick(I18n.translatable("instant-p2p.msg.kicked_by",
                 kicker != null ? kicker.name() : Component.text("?")));
