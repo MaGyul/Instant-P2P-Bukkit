@@ -40,7 +40,8 @@ public class WebRtcBridge {
         Roles.refreshAsync();
 
         LOG.info("[WebRTC] Starting native host: room={} target={}", roomId, target);
-        WebRtcHost host = new WebRtcHost(core, roomId, target);
+        // 전송 구현은 여기서만 고른다 (QUIC 전환 시 이 줄만 바뀐다)
+        WebRtcHost host = new WebRtcHost(core, new LibDataChannelTransport(core.settings().relayOnly()), roomId, target);
         webRtcHost = host;
         host.start();
     }
