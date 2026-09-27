@@ -156,7 +156,9 @@ ERROR: {anonymous}::wrap@222: PeerConnection ID does not exist
 
 ### 네이티브 로드
 
-- 플러그인 로더가 서버 플랫폼에 맞는 classifier jar 하나만 받습니다 (`x86_64`, `aarch64`, `windows-x86_64`, `macos-x86_64`, `macos-arm64`).
+- libdatachannel-java의 Java 클래스는 플러그인 jar에 들어 있습니다. JNI가 클래스 이름으로 연결하므로 패키지를 바꾸지(relocate) 않습니다.
+- 네이티브는 첫 실행 때 Maven Central에서 서버 플랫폼에 맞는 classifier jar 하나만 `plugins/<플러그인>/native/`에 받습니다 (`x86_64`, `aarch64`, `windows-x86_64`, `macos-x86_64`, `macos-arm64`).
+- 받은 jar는 빌드 때 고정한 SHA-256과 맞아야 씁니다. 해시가 맞는 jar가 이미 있으면 다시 받지 않으므로, 오프라인 서버는 그 jar를 직접 넣어 두면 됩니다. 미러는 `-Dinstantp2p.maven.repo=<URL>`로 지정합니다.
 - `/tmp`가 `noexec`로 마운트된 호스트를 위해, 네이티브를 `plugins/<플러그인>/native/`에 직접 풀고 `libdatachannel.native.datachannel-java.path`로 경로를 넘깁니다.
 - `UnsatisfiedLinkError`는 `Exception`이 아니라 일반 catch에 걸리지 않으므로, 원인을 붙여 `IllegalStateException`으로 바꿔 던집니다.
 

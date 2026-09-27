@@ -15,16 +15,20 @@ import java.nio.file.Path;
 import java.util.Collection;
 import java.util.UUID;
 
-import static dev.magyul.instantp2p.paper.InstantP2pBukkit.LOGGER;
+import static dev.magyul.instantp2p.paper.PaperEntry.LOGGER;
 
 final class PaperPlatform implements P2PPlatform {
 
     private final JavaPlugin plugin;
     private final P2PSettings settings;
+    private final ServerText text;
+    private final String minecraftVersion;
 
-    PaperPlatform(JavaPlugin plugin, P2PSettings settings) {
+    PaperPlatform(JavaPlugin plugin, P2PSettings settings, ServerText text, String minecraftVersion) {
         this.plugin = plugin;
         this.settings = settings;
+        this.text = text;
+        this.minecraftVersion = minecraftVersion;
     }
 
     @Override
@@ -45,7 +49,7 @@ final class PaperPlatform implements P2PPlatform {
 
     @Override
     public String minecraftVersion() {
-        return Bukkit.getMinecraftVersion();
+        return minecraftVersion;
     }
 
     @Override
@@ -79,7 +83,7 @@ final class PaperPlatform implements P2PPlatform {
     @Override
     public void kick(UUID player, String translationKey, Object... args) {
         Player p = Bukkit.getPlayer(player);
-        if (p != null) p.kick(PaperText.translatable(translationKey, args));
+        if (p != null) text.kick(p, translationKey, args);
     }
 
     @Override
@@ -87,7 +91,7 @@ final class PaperPlatform implements P2PPlatform {
         LOGGER.info(I18n.format(translationKey, args));
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (player.hasPermission("instantp2p.notify.host")) {
-                player.sendMessage(PaperText.translatable(translationKey, args));
+                text.send(player, translationKey, args);
             }
         }
     }

@@ -1,0 +1,14 @@
+name: instant-p2p-bukkit
+version: '${version}'
+main: dev.magyul.instantp2p.paper.PaperEntry
+api-version: '1.21'
+load: POSTWORLD
+description: instant-p2p 모드 클라이언트가 초대 코드/공개 방 목록으로 이 서버에 접속하게 한다
+
+permissions:
+  instantp2p.host:
+    description: 방장으로 취급 (expel/kick 최상위 권한, 추방·강퇴 대상 아님)
+    default: op
+  instantp2p.notify.host:
+    description: 시그널링 장애, 접속 실패, IP 복원 불가 알림을 받는다
+    default: op

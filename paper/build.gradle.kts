@@ -3,8 +3,6 @@ plugins {
     id("xyz.jpenilla.run-paper")
 }
 
-val libdatachannelVersion: String by project
-
 dependencies {
     implementation(project(":common"))
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
@@ -20,6 +18,8 @@ tasks {
     shadowJar {
         archiveClassifier = ""
         archiveBaseName = rootProject.name
+        // MC 내부를 이름으로 참조하지 않으므로 Paper의 플러그인 리매핑이 필요 없다 (Spigot은 무시)
+        manifest.attributes("paperweight-mappings-namespace" to "mojang")
     }
 
     assemble {
@@ -33,11 +33,9 @@ tasks {
     }
 
     processResources {
-        val props = mapOf(
-            "version" to project.version,
-            "libdatachannelVersion" to libdatachannelVersion)
+        val props = mapOf("version" to project.version)
         inputs.properties(props)
-        filesMatching(listOf("paper-plugin.yml", "instantp2p-libs.properties")) {
+        filesMatching("plugin.yml") {
             expand(props)
         }
     }

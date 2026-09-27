@@ -6,11 +6,36 @@ import net.kyori.adventure.text.ComponentLike;
 import net.kyori.adventure.text.TranslatableComponent;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import net.kyori.adventure.text.serializer.legacy.LegacyFormat;
+import org.bukkit.entity.Player;
+import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
 
-/** 번역 키 → Adventure 컴포넌트. 모드 클라이언트는 자기 언어, 그 외는 fallback. */
-final class PaperText {
+/** Paper: 번역 키 → Adventure 컴포넌트. 모드 클라이언트는 자기 언어, 그 외는 fallback. */
+final class AdventureText implements ServerText {
 
-    private PaperText() {}
+    @Override
+    public void kick(Player player, String key, Object... args) {
+        player.kick(translatable(key, args));
+    }
+
+    @Override
+    public void send(Player player, String key, Object... args) {
+        player.sendMessage(translatable(key, args));
+    }
+
+    @Override
+    public void disallow(AsyncPlayerPreLoginEvent event, AsyncPlayerPreLoginEvent.Result result, String key, Object... args) {
+        event.disallow(result, translatable(key, args));
+    }
+
+    @Override
+    public void appendJoinSuffix(PlayerJoinEvent event, String key) {
+        Component joinMessage = event.joinMessage();
+        if (joinMessage == null) {
+            joinMessage = Component.translatable("multiplayer.player.joined", event.getPlayer().name());
+        }
+        event.joinMessage(joinMessage.appendSpace().append(translatable(key)));
+    }
 
     /**
      * fallback의 레거시 서식 코드(§)는 떼고 맨 앞 색만 스타일로 옮긴다 — 코드를 그대로 두면

@@ -2,7 +2,6 @@ package dev.magyul.instantp2p.paper;
 
 import dev.magyul.instantp2p.common.core.P2PCore;
 import dev.magyul.instantp2p.common.tunnel.TunnelRegistry;
-import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -14,16 +13,17 @@ import org.bukkit.event.player.PlayerQuitEvent;
 final class InstantP2pListener implements Listener {
 
     private final P2PCore core;
+    private final ServerText text;
 
-    InstantP2pListener(P2PCore core) {
+    InstantP2pListener(P2PCore core, ServerText text) {
         this.core = core;
+        this.text = text;
     }
 
     @EventHandler
     public void onPreLogin(AsyncPlayerPreLoginEvent event) {
         if (!core.onPreLogin(event.getUniqueId())) {
-            event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
-                    PaperText.translatable("instant-p2p.msg.still_expelled"));
+            text.disallow(event, AsyncPlayerPreLoginEvent.Result.KICK_OTHER, "instant-p2p.msg.still_expelled");
         }
     }
 
@@ -33,21 +33,14 @@ final class InstantP2pListener implements Listener {
         TunnelRegistry tunnels = core.tunnels();
         tunnels.bySpoofed(p.getAddress()).ifPresent(t -> {
             tunnels.bindPlayer(t, p.getUniqueId());
-
-            Component joinMessage = event.joinMessage();
-            if (joinMessage == null) {
-                joinMessage = Component.translatable("multiplayer.player.joined", p.name());
-            }
-
-            Boolean relay = t.usesRelay();
-            String key = Boolean.TRUE.equals(relay)
+            String key = Boolean.TRUE.equals(t.usesRelay())
                     ? "instant-p2p.msg.join_suffix_relay"
                     : "instant-p2p.msg.join_suffix_direct";
-            event.joinMessage(joinMessage.appendSpace().append(PaperText.translatable(key)));
+            text.appendJoinSuffix(event, key);
         });
         core.onJoin(p.getUniqueId());
         if (core.ipRestoreUnavailable() && p.hasPermission("instantp2p.notify.host")) {
-            p.sendMessage(PaperText.translatable(P2PCore.IP_RESTORE_UNAVAILABLE));
+            text.send(p, P2PCore.IP_RESTORE_UNAVAILABLE);
         }
     }
 
