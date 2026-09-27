@@ -56,3 +56,12 @@ tasks {
         dependsOn(shadowJar)
     }
 }
+
+// universal 모듈이 합칠 이 플랫폼의 최종 jar
+val platformJar: Configuration by configurations.creating {
+    isCanBeConsumed = true
+    isCanBeResolved = false
+}
+artifacts {
+    add(platformJar.name, tasks.named("shadowJar"))
+}
