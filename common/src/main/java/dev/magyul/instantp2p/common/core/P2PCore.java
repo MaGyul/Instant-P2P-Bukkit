@@ -6,7 +6,7 @@ import dev.magyul.instantp2p.common.network.packet.RoomState;
 import dev.magyul.instantp2p.common.tunnel.TunnelRegistry;
 import dev.magyul.instantp2p.common.webrtc.ExpelManager;
 import dev.magyul.instantp2p.common.webrtc.Roles;
-import dev.magyul.instantp2p.common.webrtc.WebRtcBridge;
+import dev.magyul.instantp2p.common.webrtc.P2PBridge;
 
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -31,20 +31,20 @@ public final class P2PCore {
     private final TunnelRegistry tunnels = new TunnelRegistry();
     private final Set<UUID> onlinePlayers = ConcurrentHashMap.newKeySet();
     private final ExpelManager expel;
-    private final WebRtcBridge bridge;
+    private final P2PBridge bridge;
     private volatile boolean ipRestoreUnavailable;
 
     public P2PCore(P2PPlatform platform) {
         this.platform = platform;
         this.expel = new ExpelManager(platform, this::broadcastRoomState);
-        this.bridge = new WebRtcBridge(this);
+        this.bridge = new P2PBridge(this);
     }
 
     public P2PPlatform platform() { return platform; }
     public P2PSettings settings() { return platform.settings(); }
     public TunnelRegistry tunnels() { return tunnels; }
     public ExpelManager expel() { return expel; }
-    public WebRtcBridge bridge() { return bridge; }
+    public P2PBridge bridge() { return bridge; }
 
     /** IP 복원이 꺼진 상태인지 — 관리자가 입장할 때마다 다시 알린다. */
     public boolean ipRestoreUnavailable() {

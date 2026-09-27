@@ -37,13 +37,6 @@ public final class P2PConfig {
     public static final String TURN_CREDENTIAL =
             System.getProperty("kfcudp.turn.pass", "minecraft");
 
-    public static final long DC_BUF_HIGH =
-            Long.getLong("kfcudp.pipe.dchigh", 1024 * 1024L);
-    public static final long DC_BUF_LOW =
-            Long.getLong("kfcudp.pipe.dclow", 256 * 1024L);
-    public static final int PIPE_QUEUE_CHUNKS =
-            Integer.getInteger("kfcudp.pipe.queuechunks", 64);
-
     private P2PConfig() {}
 
     /** room_update에 싣는 채널 — 방송 허용이면 broadcast 태그를 붙인다. */

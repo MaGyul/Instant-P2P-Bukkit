@@ -55,7 +55,7 @@ public class TunnelRegistry {
     private final Map<InetSocketAddress, Tunnel> byLocal = new ConcurrentHashMap<>();
     private final Map<UUID, Tunnel> byPlayer = new ConcurrentHashMap<>();
 
-    // ── 호스트(WebRtcHost) 쪽 ─────────────────────────────────────────
+    // ── 호스트(QuicHost) 쪽 ─────────────────────────────────────────
 
     /**
      * dialTarget() 직후 호출. localAddress는 다이얼한 소켓의 getLocalAddress().

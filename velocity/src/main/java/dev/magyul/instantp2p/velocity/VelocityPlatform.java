@@ -8,8 +8,6 @@ import dev.magyul.instantp2p.common.core.P2PSettings;
 import dev.magyul.instantp2p.common.i18n.I18n;
 import dev.magyul.instantp2p.common.network.packet.Moderation;
 import dev.magyul.instantp2p.common.network.packet.RoomState;
-import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.core.config.Configurator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -120,15 +118,6 @@ final class VelocityPlatform implements P2PPlatform {
     public void broadcastRoomState(byte[] payload) {
         for (Player p : server.getAllPlayers()) {
             p.sendPluginMessage(ROOM_STATE, payload);
-        }
-    }
-
-    @Override
-    public void setLoggerLevel(String loggerName, String level) {
-        try {
-            Configurator.setLevel(loggerName, Level.toLevel(level, Level.WARN));
-        } catch (NoClassDefFoundError e) {
-            LOGGER.debug("log4j-core not available; {} level unchanged", loggerName);
         }
     }
 }

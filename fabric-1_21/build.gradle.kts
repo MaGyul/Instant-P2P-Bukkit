@@ -9,7 +9,7 @@ val fabric1_21MinecraftVersion: String by project
 val fabricLoaderVersion: String by project
 val fabric1_21ApiVersion: String by project
 
-/** 모드 jar에 합칠 것 — common, fabric-base, libdatachannel-java(Java 부분). slf4j는 common 쪽에서 이미 제외. */
+/** 모드 jar에 합칠 것 — common, fabric-base, kwik(QUIC, relocate). */
 val shade: Configuration by configurations.creating {
     isCanBeConsumed = false
 }

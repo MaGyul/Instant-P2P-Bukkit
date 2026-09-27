@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * 공개 방 목록 — 새 서버 인프라 없이 기존 시그널링 relay의 lobby/peer 메커니즘을 재사용한다.
  * <p>
- * {@link WebRtcHost}가 방마다 여는 {@code /{roomId}} lobby(조인 감지용)와는 별개로, 공개 방을 연
+ * {@link dev.magyul.instantp2p.common.quic.QuicHost}가 방마다 여는 {@code /{roomId}} lobby(조인 감지용)와는 별개로, 공개 방을 연
  * 호스트는 자기 채널마다 결정되는 샤드 lobby({@link P2PConfig#publicRoomsLobbyId(String, int, String)},
  * {@link P2PConfig#publicRoomShardFor(String)} 참고)에 {@code "r" + 방코드}라는 짧고 고정된 이름의
  * peer로 접속해 둔다. 방 목록 화면({@link PublicRoomBrowser})은 자기 채널들의 lobby에 동시 접속해서
@@ -45,7 +45,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <p>
  * <b>스레드</b> — 접속(TCP+핸드셰이크, 서버가 느리면 수 초)과 메시지 전송은 전부 {@link #scheduler}
  * 스레드 하나에서만 한다. 예전엔 {@code publish()}가 부른 쪽 스레드에서 곧장 접속해서, 방을 열거나
- * 밴할 때 게임 렌더/서버 스레드가 최대 수십 초 멈출 수 있었다. 이 인스턴스는 WebRtcBridge의 싱글턴이라
+ * 밴할 때 게임 렌더/서버 스레드가 최대 수십 초 멈출 수 있었다. 이 인스턴스는 P2PBridge 하나에 하나라
  * scheduler를 절대 종료하지 않는다.
  */
 final class PublicRoomAnnouncer {

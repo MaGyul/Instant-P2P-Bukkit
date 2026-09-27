@@ -158,7 +158,7 @@ class ExpelManagerTest {
 
         @Override public P2PSettings settings() {
             return new P2PSettings(true, HOST, "1.2.3", "", "Server", true, List.of("normal"),
-                    false, allowBroadcast, false, "WARN");
+                    false, allowBroadcast, false);
         }
         @Override public Collection<UUID> bannedPlayers() { return List.of(); }
         @Override public int maxPlayers() { return 20; }
@@ -174,6 +174,5 @@ class ExpelManagerTest {
         @Override public void notifyAdmins(String key, Object... args) {}
         @Override public void runSync(Runnable task) { task.run(); }
         @Override public void broadcastRoomState(byte[] payload) {}
-        @Override public void setLoggerLevel(String loggerName, String level) {}
     }
 }

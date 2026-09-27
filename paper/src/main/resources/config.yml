@@ -8,7 +8,7 @@ title: ""
 publicRoom: true
 
 # 타겟을 할 모드 버전
-targetModVersion: 1.2.3
+targetModVersion: "1.3"
 
 # P2P 설정
 relayOnly: false
@@ -20,6 +20,3 @@ channelAnd: false
 
 # 서버 고유 UUID (자동으로 채워집니다)
 serverUuid: ""
-
-# 네이티브 로그의 출력 단계 설정 (INFO, WARN, ERROR, DEBUG)
-nativeLogLevel: WARN

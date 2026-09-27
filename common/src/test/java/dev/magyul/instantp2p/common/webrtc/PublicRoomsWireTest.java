@@ -67,7 +67,7 @@ class PublicRoomsWireTest {
 
     private static P2PSettings settings(boolean allowBroadcast) {
         return new P2PSettings(true, java.util.UUID.randomUUID(), "1.2.3", "", "Server", true,
-                List.of("normal", "pvp"), false, allowBroadcast, false, "WARN");
+                List.of("normal", "pvp"), false, allowBroadcast, false);
     }
 
     @Test

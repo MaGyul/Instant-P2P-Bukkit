@@ -29,7 +29,7 @@ val universalJar by tasks.registering(Jar::class) {
     archiveClassifier = ""
     destinationDirectory = layout.buildDirectory.dir("libs")
 
-    // 공통 코드(common, libdatachannel, i18n, 네이티브 해시)는 리매핑하지 않은 Paper jar의 것을 쓴다
+    // 공통 코드(common, relocate된 kwik, i18n)는 리매핑하지 않은 Paper jar의 것을 쓴다
     from(paperFiles.map { files -> files.map { archives.zipTree(it.asFile) } }) {
         exclude("META-INF/MANIFEST.MF")
     }
@@ -63,17 +63,19 @@ val checkUniversalJar by tasks.registering {
                 "dev/magyul/instantp2p/fabric/FabricEntry.class",
                 "dev/magyul/instantp2p/fabric/v1_21/FabricImpl.class",
                 "dev/magyul/instantp2p/fabric/v26/FabricImpl.class",
-                // JNI가 이 이름으로 링크한다 — relocate되면 안 된다
-                "tel/schich/libdatachannel/LibDataChannel.class",
-                "instantp2p-natives.properties",
+                // QUIC — relocate된 이름으로 들어 있어야 한다
+                "dev/magyul/instantp2p/libs/kwik/core/QuicConnection.class",
+                "dev/magyul/instantp2p/libs/kwik/core/version.properties",
                 "i18n/ko.json",
             ).filterNot(::has).forEach { problems += "없음: $it" }
 
             // paper-plugin.yml이 있으면 Paper와 Spigot 동작이 갈린다
             if (has("paper-plugin.yml")) problems += "paper-plugin.yml이 들어 있다"
             // 서버가 제공하는 라이브러리는 넣지 않는다
+            // relocate 안 된 kwik이 있으면 원본 클라이언트 모드와 겹친다
             val bundled = listOf("org/slf4j/", "com/google/gson/", "com/google/common/", "io/netty/",
-                "net/kyori/", "org/apache/logging/", "net/minecraft/", "org/bukkit/")
+                "net/kyori/", "org/apache/logging/", "net/minecraft/", "org/bukkit/",
+                "tech/kwik/", "at/favre/", "io/whitfin/", "tel/schich/")
             zip.entries().asSequence().map { it.name }
                 .filter { name -> bundled.any { name.startsWith(it) } }
                 .take(5).forEach { problems += "포함되면 안 되는 클래스: $it" }

@@ -16,15 +16,14 @@ final class PaperSettings {
         return new P2PSettings(
                 config.getBoolean("enabled", true),
                 serverUuid(plugin, config),
-                config.getString("targetModVersion", "1.2.3"),
+                config.getString("targetModVersion", "1.3"),
                 config.getString("title", ""),
                 config.getString("name", "Server"),
                 config.getBoolean("publicRoom", true),
                 config.getStringList("channels"),
                 config.getBoolean("channelAnd", false),
                 config.getBoolean("allowBroadcast", false),
-                config.getBoolean("relayOnly", false),
-                config.getString("nativeLogLevel", "WARN"));
+                config.getBoolean("relayOnly", false));
     }
 
     /** 서버 고유 UUID (없으면 랜덤으로 생성 후 저장) */

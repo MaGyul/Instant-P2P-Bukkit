@@ -7,8 +7,6 @@ import dev.magyul.instantp2p.fabric.ServerListFiles;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
-import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.core.config.Configurator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -136,15 +134,6 @@ final class FabricPlatform implements P2PPlatform {
             if (ServerPlayNetworking.canSend(p, Payloads.RoomStatePayload.TYPE)) {
                 ServerPlayNetworking.send(p, packet);
             }
-        }
-    }
-
-    @Override
-    public void setLoggerLevel(String loggerName, String level) {
-        try {
-            Configurator.setLevel(loggerName, Level.toLevel(level, Level.WARN));
-        } catch (NoClassDefFoundError e) {
-            LOGGER.debug("log4j-core not available; {} level unchanged", loggerName);
         }
     }
 }

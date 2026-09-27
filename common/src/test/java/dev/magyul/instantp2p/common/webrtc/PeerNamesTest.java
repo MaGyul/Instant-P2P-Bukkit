@@ -4,15 +4,15 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/** 시그널링 피어 이름 규칙 — CLAUDE.md "건드리면 안 되는 것". */
+/** 시그널링 피어 이름 규칙 (원본 모드 1.3 QUIC) — CLAUDE.md "건드리면 안 되는 것". */
 class PeerNamesTest {
 
     private static final String SID = "0123456789abcdef";
 
     @Test
-    void lobbyHostIsHPlusFiveHex() {
-        assertEquals("h10000", PeerNames.lobbyHost(0x10000));
-        assertEquals("hfffff", PeerNames.lobbyHost(0xFFFFF));
+    void lobbyHostIsHPlusFourDigits() {
+        assertEquals("h1000", PeerNames.lobbyHost(1000));
+        assertEquals("h9999", PeerNames.lobbyHost(9999));
     }
 
     @Test
@@ -56,8 +56,7 @@ class PeerNamesTest {
     @Test
     void pairSessionNames() {
         assertEquals("ABCDEFGHJK-" + SID, PeerNames.pairRoom("ABCDEFGHJK", SID));
-        assertEquals("hd" + SID, PeerNames.pairHost(false, SID));
-        assertEquals("hr" + SID, PeerNames.pairHost(true, SID));
+        assertEquals("h" + SID, PeerNames.pairHost(SID)); // 1.2.x(WebRTC)의 h{d|r}{sid}가 아니다
         assertEquals("hq" + SID, PeerNames.probeHost(SID));
     }
 }

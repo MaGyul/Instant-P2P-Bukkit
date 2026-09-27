@@ -51,7 +51,4 @@ public interface P2PPlatform {
 
     /** 서버 스레드. instant-p2p:room_state 페이로드를 접속자 전원에게 보낸다. */
     void broadcastRoomState(byte[] payload);
-
-    /** 로거 단계 조정. 로깅 백엔드가 지원하지 않으면 무시한다. */
-    void setLoggerLevel(String loggerName, String level);
 }

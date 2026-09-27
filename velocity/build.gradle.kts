@@ -9,10 +9,9 @@ dependencies {
     compileOnly("com.velocitypowered:velocity-api:$velocityApiVersion")
     // velocity-plugin.json 생성
     annotationProcessor("com.velocitypowered:velocity-api:$velocityApiVersion")
-    // 프록시가 런타임에 제공한다 (IP 복원용 Netty 파이프라인·HAProxyMessage, nativeLogLevel용 log4j-core)
+    // 프록시가 런타임에 제공한다 (IP 복원용 Netty 파이프라인·HAProxyMessage)
     compileOnly("io.netty:netty-transport:4.1.97.Final")
     compileOnly("io.netty:netty-codec-haproxy:4.1.97.Final")
-    compileOnly("org.apache.logging.log4j:log4j-core:2.22.1")
 
     testImplementation("com.velocitypowered:velocity-api:$velocityApiVersion")
 }

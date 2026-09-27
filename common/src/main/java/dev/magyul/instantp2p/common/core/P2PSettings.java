@@ -11,7 +11,6 @@ import java.util.UUID;
  *
  * @param channels         설정에 적힌 그대로의 채널 목록 (정규화 전)
  * @param targetModVersion 공개 방 로비 ID에 해시로 들어간다. 클라이언트 모드 버전과 같아야 목록에 보인다.
- * @param nativeLogLevel   libdatachannel 네이티브 로그 단계 (INFO/WARN/ERROR/DEBUG)
  */
 public record P2PSettings(
         boolean enabled,
@@ -23,8 +22,7 @@ public record P2PSettings(
         List<String> channels,
         boolean channelAnd,
         boolean allowBroadcast,
-        boolean relayOnly,
-        String nativeLogLevel
+        boolean relayOnly
 ) {
 
     public P2PSettings {

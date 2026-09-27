@@ -40,7 +40,7 @@ public final class JsonSettings {
         String name = string(json, "name", "Server");
         String title = string(json, "title", "");
         boolean publicRoom = bool(json, "publicRoom", true);
-        String targetModVersion = string(json, "targetModVersion", "1.2.3");
+        String targetModVersion = string(json, "targetModVersion", "1.3");
         boolean relayOnly = bool(json, "relayOnly", false);
         boolean allowBroadcast = bool(json, "allowBroadcast", false);
         List<String> channels = strings(json, "channels", List.of("normal"));
@@ -50,7 +50,6 @@ public final class JsonSettings {
             serverUuid = UUID.randomUUID().toString();
             json.addProperty("serverUuid", serverUuid);
         }
-        String nativeLogLevel = string(json, "nativeLogLevel", "WARN");
 
         if (!GSON.toJson(json).equals(before)) {
             Files.createDirectories(file.getParent());
@@ -60,7 +59,7 @@ public final class JsonSettings {
         }
 
         return new P2PSettings(enabled, UUID.fromString(serverUuid), targetModVersion, title, name, publicRoom,
-                channels, channelAnd, allowBroadcast, relayOnly, nativeLogLevel);
+                channels, channelAnd, allowBroadcast, relayOnly);
     }
 
     /** 플랫폼 전용 문자열 키 (예: Velocity의 minecraftVersion). 없으면 기본값을 채워 저장한다. */

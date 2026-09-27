@@ -29,7 +29,7 @@ public abstract class WebSocketClient {
     private static final int MAX_FRAME_BYTES      = 16 * 1024 * 1024;
     /** 서버는 연결마다 9초 간격으로 ping을 보낸다 — 이보다 훨씬 오래(3회분 이상) 아무
      * 프레임도 안 오면 TCP만 살아 있고 실제로는 끊긴(NAT 매핑 만료·회선 전환 등) 연결이다. */
-    static final int LIVENESS_TIMEOUT_MS = 30_000;
+    protected static final int LIVENESS_TIMEOUT_MS = 30_000;
 
     private final String url;
 
