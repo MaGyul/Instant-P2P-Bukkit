@@ -1,11 +1,10 @@
-package dev.magyul.instantp2p.fabric;
+package dev.magyul.instantp2p.common.core;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import dev.magyul.instantp2p.common.core.P2PSettings;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -18,14 +17,14 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * {@code config/instant-p2p-server/config.json} → {@link P2PSettings}. 키는 Paper config.yml과 같다.
- * 없으면 기본값으로 만들고, 빠진 키는 채워서 다시 저장한다(serverUuid 생성 포함).
+ * JSON 설정 파일 → {@link P2PSettings} (Fabric, Velocity). 키는 Paper config.yml과 같다.
+ * 없으면 기본값으로 만들고, 빠진 키는 채워서 다시 저장한다(serverUuid 생성 포함). 모르는 키는 그대로 둔다.
  */
-public final class FabricSettings {
+public final class JsonSettings {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
 
-    private FabricSettings() {}
+    private JsonSettings() {}
 
     public static P2PSettings load(Path file) throws IOException {
         JsonObject json = new JsonObject();
@@ -62,6 +61,24 @@ public final class FabricSettings {
 
         return new P2PSettings(enabled, UUID.fromString(serverUuid), targetModVersion, title, name, publicRoom,
                 channels, channelAnd, allowBroadcast, relayOnly, nativeLogLevel);
+    }
+
+    /** 플랫폼 전용 문자열 키 (예: Velocity의 minecraftVersion). 없으면 기본값을 채워 저장한다. */
+    public static String extraString(Path file, String key, String def) throws IOException {
+        JsonObject json = new JsonObject();
+        if (Files.exists(file)) {
+            try (Reader r = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+                JsonObject read = GSON.fromJson(r, JsonObject.class);
+                if (read != null) json = read;
+            }
+        }
+        if (json.has(key) && json.get(key).isJsonPrimitive()) return json.get(key).getAsString();
+        json.addProperty(key, def);
+        Files.createDirectories(file.getParent());
+        try (Writer w = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
+            GSON.toJson(json, w);
+        }
+        return def;
     }
 
     private static boolean bool(JsonObject json, String key, boolean def) {

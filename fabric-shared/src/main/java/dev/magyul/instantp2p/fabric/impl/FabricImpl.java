@@ -2,10 +2,10 @@ package dev.magyul.instantp2p.fabric.impl;
 
 import dev.magyul.instantp2p.common.Utils;
 import dev.magyul.instantp2p.common.core.P2PCore;
+import dev.magyul.instantp2p.common.core.JsonSettings;
 import dev.magyul.instantp2p.common.core.P2PSettings;
 import dev.magyul.instantp2p.common.tunnel.TunnelInjector;
 import dev.magyul.instantp2p.fabric.FabricEntry;
-import dev.magyul.instantp2p.fabric.FabricSettings;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerConfigurationConnectionEvents;
@@ -53,7 +53,7 @@ public final class FabricImpl implements FabricEntry.Impl {
         P2PSettings settings;
         try {
             LOGGER.info("컨피그를 불러오는 중...");
-            settings = FabricSettings.load(dataFolder.resolve("config.json"));
+            settings = JsonSettings.load(dataFolder.resolve("config.json"));
         } catch (Exception e) {
             LOGGER.error("컨피그를 불러오는데 실패 했습니다! config/{}/config.json 파일에 문제가 없나요?", MOD_DIR, e);
             return;

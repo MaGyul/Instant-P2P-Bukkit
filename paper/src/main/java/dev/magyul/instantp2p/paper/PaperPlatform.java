@@ -88,7 +88,7 @@ final class PaperPlatform implements P2PPlatform {
 
     @Override
     public void notifyAdmins(String translationKey, Object... args) {
-        LOGGER.info(I18n.format(translationKey, args));
+        LOGGER.info(I18n.stripLegacy(I18n.format(translationKey, args))); // 콘솔에는 서식 코드 없이
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (player.hasPermission("instantp2p.notify.host")) {
                 text.send(player, translationKey, args);

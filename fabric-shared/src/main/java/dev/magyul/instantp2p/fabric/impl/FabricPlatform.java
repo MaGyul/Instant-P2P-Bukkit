@@ -104,7 +104,7 @@ final class FabricPlatform implements P2PPlatform {
 
     @Override
     public void notifyAdmins(String translationKey, Object... args) {
-        LOGGER.info(I18n.format(translationKey, args));
+        LOGGER.info(I18n.stripLegacy(I18n.format(translationKey, args))); // 콘솔에는 서식 코드 없이
         MinecraftServer s = server;
         if (s == null) return;
         for (ServerPlayer p : s.getPlayerList().getPlayers()) {
