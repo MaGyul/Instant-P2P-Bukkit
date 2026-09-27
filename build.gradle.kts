@@ -1,7 +1,8 @@
 plugins {
     id("com.gradleup.shadow") version "9.2.2" apply false
     id("xyz.jpenilla.run-paper") version "3.1.0" apply false
-    id("net.fabricmc.fabric-loom-remap") version "1.17.21" apply false // 1.18+는 Gradle JVM 25 필요
+    id("net.fabricmc.fabric-loom-remap") version "1.18.2" apply false
+    id("net.fabricmc.fabric-loom") version "1.18.2" apply false
 }
 
 subprojects {

@@ -1,4 +1,4 @@
-package dev.magyul.instantp2p.fabric.v1_21;
+package dev.magyul.instantp2p.fabric.impl;
 
 import java.lang.reflect.Method;
 import java.util.UUID;

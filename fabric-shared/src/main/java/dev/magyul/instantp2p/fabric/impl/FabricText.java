@@ -1,4 +1,4 @@
-package dev.magyul.instantp2p.fabric.v1_21;
+package dev.magyul.instantp2p.fabric.impl;
 
 import dev.magyul.instantp2p.common.i18n.I18n;
 import net.minecraft.ChatFormatting;

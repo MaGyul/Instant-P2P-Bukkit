@@ -1,4 +1,4 @@
-package dev.magyul.instantp2p.fabric.v1_21;
+package dev.magyul.instantp2p.fabric.impl;
 
 import dev.magyul.instantp2p.common.network.packet.Moderation;
 import dev.magyul.instantp2p.common.network.packet.RoomState;

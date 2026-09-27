@@ -1,4 +1,4 @@
-package dev.magyul.instantp2p.fabric.v1_21;
+package dev.magyul.instantp2p.fabric.impl;
 
 import dev.magyul.instantp2p.common.Utils;
 import dev.magyul.instantp2p.common.core.P2PCore;
@@ -8,7 +8,6 @@ import dev.magyul.instantp2p.fabric.FabricEntry;
 import dev.magyul.instantp2p.fabric.FabricSettings;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
-import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerConfigurationConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
@@ -26,10 +25,13 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Fabric 1.21.x 구현. {@link FabricEntry}가 버전을 확인한 뒤 리플렉션으로 로드한다.
- * Mojang 이름으로 컴파일하고 remapJar가 intermediary로 바꾼다 — 1.21.x 전체에서 같은 이름이다.
+ * Fabric 구현. {@link FabricEntry}가 버전을 확인한 뒤 리플렉션으로 로드한다.
+ * <p>
+ * <b>이 소스는 두 번 컴파일된다</b> — {@code fabric-1_21} 모듈(1.21.11, remap해 intermediary로 → 패키지 {@code v1_21})과
+ * {@code fabric-26} 모듈(26.1, remap 없음 → 패키지 {@code v26}). 런타임 이름이 버전마다 달라 결과물은 둘이어야 한다.
+ * 그래서 여기서는 1.21.0~26.x에 모두 같은 이름으로 있는 MC/Fabric API만 쓴다. 이름이 다른 곳은 모듈별 {@link Compat}에 둔다.
  */
-public final class Fabric121 implements FabricEntry.Impl {
+public final class FabricImpl implements FabricEntry.Impl {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("Instant-P2P");
     private static final String MOD_DIR = "instant-p2p-server";
@@ -66,8 +68,7 @@ public final class Fabric121 implements FabricEntry.Impl {
         platform = new FabricPlatform(settings, dataFolder, loader.getGameDir(), version);
         core = new P2PCore(platform);
 
-        PayloadTypeRegistry.playS2C().register(Payloads.RoomStatePayload.TYPE, Payloads.RoomStatePayload.CODEC);
-        PayloadTypeRegistry.playC2S().register(Payloads.ModerationPayload.TYPE, Payloads.ModerationPayload.CODEC);
+        Compat.registerPayloads();
         // 1.20.5+ 수신 핸들러는 서버 스레드에서 돈다
         ServerPlayNetworking.registerGlobalReceiver(Payloads.ModerationPayload.TYPE,
                 (payload, context) -> core.onModeration(context.player().getUUID(), payload.data()));
@@ -132,7 +133,7 @@ public final class Fabric121 implements FabricEntry.Impl {
         if (settings.publicRoom()) {
             String title = settings.title().isEmpty() ? server.getMotd() : settings.title();
             core.bridge().publishPublicRoom(inviteCode, title, settings.name(), settings.serverUuid().toString(),
-                    server.getPlayerCount(), server.getMaxPlayers());
+                    server.getPlayerCount(), server.getPlayerList().getMaxPlayers());
         }
     }
 

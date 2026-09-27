@@ -1,4 +1,4 @@
-package dev.magyul.instantp2p.fabric.v1_21;
+package dev.magyul.instantp2p.fabric.impl;
 
 import dev.magyul.instantp2p.common.core.P2PPlatform;
 import dev.magyul.instantp2p.common.core.P2PSettings;
@@ -17,8 +17,8 @@ import java.util.Collection;
 import java.util.UUID;
 
 /**
- * Fabric 1.21.x 플랫폼. 1.21.x 안에서 시그니처가 바뀐 API(권한, GameProfile, 밴 목록 항목)는 쓰지 않는다 —
- * op·밴 목록은 파일로 읽는다({@link ServerListFiles}). 여기서 쓰는 MC API는 1.21.0~1.21.11 공통이어야 한다.
+ * Fabric 플랫폼. 버전마다 시그니처가 바뀐 API(권한, GameProfile, 밴 목록 항목)는 쓰지 않는다 —
+ * op·밴 목록은 파일로 읽는다({@link ServerListFiles}). 여기서 쓰는 MC API는 1.21.0~26.x 공통이어야 한다({@link FabricImpl} 참고).
  */
 final class FabricPlatform implements P2PPlatform {
 
@@ -56,7 +56,7 @@ final class FabricPlatform implements P2PPlatform {
     @Override
     public int maxPlayers() {
         MinecraftServer s = server;
-        return s != null ? s.getMaxPlayers() : 0;
+        return s != null ? s.getPlayerList().getMaxPlayers() : 0;
     }
 
     @Override
