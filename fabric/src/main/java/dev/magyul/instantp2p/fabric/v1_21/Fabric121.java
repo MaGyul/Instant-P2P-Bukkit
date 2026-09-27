@@ -1,0 +1,171 @@
+package dev.magyul.instantp2p.fabric.v1_21;
+
+import dev.magyul.instantp2p.common.Utils;
+import dev.magyul.instantp2p.common.core.P2PCore;
+import dev.magyul.instantp2p.common.core.P2PSettings;
+import dev.magyul.instantp2p.common.tunnel.TunnelInjector;
+import dev.magyul.instantp2p.fabric.FabricEntry;
+import dev.magyul.instantp2p.fabric.FabricSettings;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
+import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
+import net.fabricmc.fabric.api.networking.v1.ServerConfigurationConnectionEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.contents.TranslatableContents;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.nio.file.Path;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * Fabric 1.21.x 구현. {@link FabricEntry}가 버전을 확인한 뒤 리플렉션으로 로드한다.
+ * Mojang 이름으로 컴파일하고 remapJar가 intermediary로 바꾼다 — 1.21.x 전체에서 같은 이름이다.
+ */
+public final class Fabric121 implements FabricEntry.Impl {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger("Instant-P2P");
+    private static final String MOD_DIR = "instant-p2p-server";
+
+    private P2PCore core;
+    private FabricPlatform platform;
+    /** 입장 메시지에 붙일 suffix (INIT에서 기록, 입장 메시지가 나갈 때 소비) */
+    private final Map<ServerPlayer, PendingSuffix> pendingJoinSuffix = new ConcurrentHashMap<>();
+
+    /** 입장 메시지를 끈 서버 등에서 소비되지 않은 항목은 이 시간이 지나면 버린다 */
+    private static final long PENDING_SUFFIX_TTL_MS = 30_000;
+
+    private record PendingSuffix(String key, long createdAt) {}
+
+    @Override
+    public void init() {
+        FabricLoader loader = FabricLoader.getInstance();
+        Path dataFolder = loader.getConfigDir().resolve(MOD_DIR);
+        P2PSettings settings;
+        try {
+            LOGGER.info("컨피그를 불러오는 중...");
+            settings = FabricSettings.load(dataFolder.resolve("config.json"));
+        } catch (Exception e) {
+            LOGGER.error("컨피그를 불러오는데 실패 했습니다! config/{}/config.json 파일에 문제가 없나요?", MOD_DIR, e);
+            return;
+        }
+        if (!settings.enabled()) {
+            LOGGER.info("P2P 기능이 비활성화 되어있으므로 instant-p2p가 비활성화됩니다.");
+            return;
+        }
+
+        String version = loader.getModContainer("minecraft")
+                .map(c -> c.getMetadata().getVersion().getFriendlyString()).orElse("unknown");
+        platform = new FabricPlatform(settings, dataFolder, loader.getGameDir(), version);
+        core = new P2PCore(platform);
+
+        PayloadTypeRegistry.playS2C().register(Payloads.RoomStatePayload.TYPE, Payloads.RoomStatePayload.CODEC);
+        PayloadTypeRegistry.playC2S().register(Payloads.ModerationPayload.TYPE, Payloads.ModerationPayload.CODEC);
+        // 1.20.5+ 수신 핸들러는 서버 스레드에서 돈다
+        ServerPlayNetworking.registerGlobalReceiver(Payloads.ModerationPayload.TYPE,
+                (payload, context) -> core.onModeration(context.player().getUUID(), payload.data()));
+
+        ServerLifecycleEvents.SERVER_STARTED.register(this::onStarted);
+        ServerLifecycleEvents.SERVER_STOPPING.register(server -> onStopping());
+
+        // 로그인 전 검사: 추방 상태면 설정 단계에서 끊는다 (월드에 들어오기 전)
+        ServerConfigurationConnectionEvents.CONFIGURE.register((handler, server) -> {
+            UUID id = Profiles.id(handler.getOwner());
+            if (id != null && !core.onPreLogin(id)) {
+                handler.disconnect(FabricText.translatable("instant-p2p.msg.still_expelled"));
+            }
+        });
+
+        // 게임 핸들러가 생길 때(입장 메시지보다 먼저) 터널을 묶고 suffix를 준비한다
+        ServerPlayConnectionEvents.INIT.register((handler, server) -> {
+            ServerPlayer player = handler.player;
+            core.tunnels().bySpoofed(asInet(handler.getRemoteAddress())).ifPresent(t -> {
+                core.tunnels().bindPlayer(t, player.getUUID());
+                long now = System.currentTimeMillis();
+                pendingJoinSuffix.values().removeIf(p -> now - p.createdAt() > PENDING_SUFFIX_TTL_MS);
+                pendingJoinSuffix.put(player, new PendingSuffix(Boolean.TRUE.equals(t.usesRelay())
+                        ? "instant-p2p.msg.join_suffix_relay"
+                        : "instant-p2p.msg.join_suffix_direct", now));
+            });
+        });
+
+        ServerMessageEvents.ALLOW_GAME_MESSAGE.register(this::appendJoinSuffix);
+
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
+            ServerPlayer player = handler.player;
+            // JOIN은 입장 메시지보다 먼저 온다 — 여기서 suffix를 지우면 안 된다.
+            // (server.execute도 서버 스레드에서 부르면 미루지 않고 즉시 실행한다)
+            core.onJoin(player.getUUID());
+            if (core.ipRestoreUnavailable() && platform.isAdmin(player)) {
+                player.sendSystemMessage(FabricText.translatable(P2PCore.IP_RESTORE_UNAVAILABLE));
+            }
+        });
+
+        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
+            pendingJoinSuffix.remove(handler.player);
+            core.onQuit(handler.player.getUUID());
+        });
+    }
+
+    private void onStarted(MinecraftServer server) {
+        platform.attach(server);
+        // IP 복원은 실패해도 접속은 되므로 끄지 않는다 (관리자에게만 알림)
+        TunnelInjector.inject(server, core.tunnels(), core::markIpRestoreUnavailable);
+
+        LOGGER.info("초대 코드 생성중...");
+        String inviteCode = Utils.generateCode();
+        try {
+            core.bridge().startHost(inviteCode, "127.0.0.1:" + platform.listenPort());
+        } catch (Exception e) {
+            LOGGER.error("[instant-p2p] Failed to start host: {}", e.getMessage(), e);
+        }
+        LOGGER.info("초대 코드: {}", inviteCode);
+
+        P2PSettings settings = platform.settings();
+        if (settings.publicRoom()) {
+            String title = settings.title().isEmpty() ? server.getMotd() : settings.title();
+            core.bridge().publishPublicRoom(inviteCode, title, settings.name(), settings.serverUuid().toString(),
+                    server.getPlayerCount(), server.getMaxPlayers());
+        }
+    }
+
+    private void onStopping() {
+        TunnelInjector.uninject();
+        core.tunnels().clear();
+        core.bridge().stopHost();
+    }
+
+    /**
+     * 바닐라는 입장 메시지를 플레이어를 목록에 넣기 전에 보내므로 입장한 본인은 원래 자기 입장 메시지를 못 본다
+     * (Paper는 순서를 바꿔 본인에게도 보인다).
+     * 바닐라 입장 메시지("multiplayer.player.joined")는 이벤트 없이 브로드캐스트되므로, 나가는 순간 가로채서
+     * suffix를 붙인 메시지로 다시 보낸다. 인자(표시 이름)로 대상 플레이어를 찾는다.
+     */
+    private boolean appendJoinSuffix(MinecraftServer server, Component message, boolean overlay) {
+        if (pendingJoinSuffix.isEmpty() || overlay) return true;
+        if (!(message.getContents() instanceof TranslatableContents tc)
+                || !tc.getKey().startsWith("multiplayer.player.joined") || tc.getArgs().length == 0) {
+            return true;
+        }
+        String shown = tc.getArgs()[0] instanceof Component c ? c.getString() : String.valueOf(tc.getArgs()[0]);
+        for (Map.Entry<ServerPlayer, PendingSuffix> e : pendingJoinSuffix.entrySet()) {
+            if (!e.getKey().getDisplayName().getString().equals(shown)) continue;
+            pendingJoinSuffix.remove(e.getKey());
+            Component withSuffix = message.copy().append(" ").append(FabricText.translatable(e.getValue().key()));
+            server.getPlayerList().broadcastSystemMessage(withSuffix, false);
+            return false;
+        }
+        return true;
+    }
+
+    private static java.net.InetSocketAddress asInet(java.net.SocketAddress address) {
+        return address instanceof java.net.InetSocketAddress isa ? isa : null;
+    }
+}

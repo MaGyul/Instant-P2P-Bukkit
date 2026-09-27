@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "instant-p2p-server",
+  "version": "${version}",
+  "name": "instant-p2p server",
+  "description": "instant-p2p 모드 클라이언트가 초대 코드/공개 방 목록으로 이 전용 서버에 접속하게 한다",
+  "authors": ["MaGyul"],
+  "license": "CC0-1.0",
+  "environment": "server",
+  "entrypoints": {
+    "server": ["dev.magyul.instantp2p.fabric.FabricEntry"]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": ">=1.21",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}

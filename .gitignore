@@ -21,3 +21,6 @@ hs_err_pid*
 
 # Common working directory
 run
+
+# Fabric 개발 서버
+run-fabric
