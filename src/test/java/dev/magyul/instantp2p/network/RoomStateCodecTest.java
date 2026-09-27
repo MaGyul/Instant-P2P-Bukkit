@@ -52,16 +52,23 @@ class RoomStateCodecTest {
         // VarInt action(2 = kick) + UUID target
         byte[] bytes = HexFormat.of().parseHex("02" + "feb58aa856f64728854682071e39dd24");
         Moderation m = new Moderation(PacketByteBuf.wrap(bytes));
-        assertEquals(P2PNet.ACTION_KICK, m.action());
+        assertEquals(Moderation.ACTION_KICK, m.action());
         assertEquals(A, m.target());
     }
 
     @Test
+    void encodeModeration() {
+        PacketByteBuf buf = PacketByteBuf.allocate();
+        new Moderation(Moderation.ACTION_EXPEL, A).write(buf);
+        assertEquals("00" + "feb58aa856f64728854682071e39dd24", HexFormat.of().formatHex(buf.toByteArray()));
+    }
+
+    @Test
     void actionIds() {
-        assertEquals(0, P2PNet.ACTION_EXPEL);
-        assertEquals(1, P2PNet.ACTION_READMIT);
-        assertEquals(2, P2PNet.ACTION_KICK);
-        assertEquals(3, P2PNet.ACTION_REQUEST_STATE);
+        assertEquals(0, Moderation.ACTION_EXPEL);
+        assertEquals(1, Moderation.ACTION_READMIT);
+        assertEquals(2, Moderation.ACTION_KICK);
+        assertEquals(3, Moderation.ACTION_REQUEST_STATE);
     }
 
     @Test

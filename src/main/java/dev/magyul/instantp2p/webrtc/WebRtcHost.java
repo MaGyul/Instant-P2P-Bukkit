@@ -1,10 +1,8 @@
 package dev.magyul.instantp2p.webrtc;
 
-import dev.magyul.instantp2p.InstantP2pBukkit;
 import dev.magyul.instantp2p.Utils;
+import dev.magyul.instantp2p.core.P2PCore;
 import dev.magyul.instantp2p.tunnel.TunnelRegistry;
-import org.bukkit.Bukkit;
-import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tel.schich.libdatachannel.DataChannel;
@@ -28,8 +26,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
-
-import static dev.magyul.instantp2p.InstantP2pBukkit.TUNNEL_REGISTRY;
 
 /**
  * Java 네이티브 WebRTC 호스트 — VILLASframework signaling 프로토콜.
@@ -66,6 +62,9 @@ public class WebRtcHost {
     private static final long   DC_BUF_LOW           = P2PConfig.DC_BUF_LOW; // 이하로 빠지면 송신 재개
 
     // ── 인스턴스 필드 ─────────────────────────────────────────────────────────
+    private final P2PCore core;
+    /** 로컬 다이얼 소켓 → 접속자 식별자. 플랫폼 쪽 IP 복원(TunnelInjector)이 조회한다. */
+    private final TunnelRegistry tunnels;
     private final String roomId;
     private final String targetHost;
     private final int    targetPort;
@@ -107,7 +106,9 @@ public class WebRtcHost {
      * 방장에게 경고를 띄우지 않는다. */
     private volatile int consecutiveFailures = 0;
 
-    public WebRtcHost(String roomId, String target) {
+    public WebRtcHost(P2PCore core, String roomId, String target) {
+        this.core = core;
+        this.tunnels = core.tunnels();
         this.roomId = roomId;
         int colon = target.lastIndexOf(':');
         if (colon < 0) throw new IllegalArgumentException("invalid target: " + target);
@@ -211,7 +212,7 @@ public class WebRtcHost {
     }
 
     private void notifyHost(String translationKey) {
-        Utils.sendAdministratorMessage(translationKey);
+        core.platform().notifyAdmins(translationKey);
     }
 
     private void handleLobby(String json) {
@@ -270,7 +271,7 @@ public class WebRtcHost {
                 + PeerNames.pairRoom(roomId, sid) + "/" + PeerNames.probeHost(sid)) {
             @Override public void onConnected() {
                 send(VillasMsg.hello());
-                send(VillasMsg.description("members", Utils.encodePlayerHashes(InstantP2pBukkit.INSTANCE.onlinePlayers, roomId)));
+                send(VillasMsg.description("members", Utils.encodePlayerHashes(core.onlinePlayers(), roomId)));
             }
             @Override public void onMessage(String type, String json) {}
         };
@@ -347,9 +348,8 @@ public class WebRtcHost {
      *                    {@link PairSignal#handlePair} 참고.
      */
     private PeerConnectionConfiguration buildConfig(boolean allowRelay) {
-        // ICE 서버 구성 (relay-only 여부는 config.isRelayOnly())
         // webrtc-java 시절의 -Dkfcudp.ice.anyaddress(portAllocatorConfig)는 libdatachannel에 대응 옵션이 없다.
-        return IceConfig.build(serverRelays, "host", allowRelay);
+        return IceConfig.build(serverRelays, "host", allowRelay, core.settings().relayOnly());
     }
 
     // ── 페어 세션 (조인자별 1:1 시그널링) ────────────────────────────────────
@@ -398,8 +398,8 @@ public class WebRtcHost {
             } catch (RejectedExecutionException ignored) {}
         }
 
-        private @NonNull WebSocketClient createClient() {
-            boolean relayOnly = InstantP2pBukkit.INSTANCE.config.isRelayOnly();
+        private WebSocketClient createClient() {
+            boolean relayOnly = core.settings().relayOnly();
             return new WebSocketClient(P2PConfig.SIGNALING_URL + "/"
                     + PeerNames.pairRoom(roomId, sid) + "/" + PeerNames.pairHost(relayOnly, sid)) {
                 @Override public void onConnected() {
@@ -631,7 +631,7 @@ public class WebRtcHost {
          * IP는 넣지 않는다 — 방장이 스크린샷을 공유하면 그대로 노출된다.
          */
         private void notifyHostFailure() {
-            Utils.sendAdministratorMessage("instant-p2p.msg.guest_connect_failed");
+            core.platform().notifyAdmins("instant-p2p.msg.guest_connect_failed");
         }
 
         /**
@@ -663,7 +663,7 @@ public class WebRtcHost {
         private void applyRelay(boolean relay) {
             relayResult = relay;
             TunnelRegistry.Tunnel t = tunnel;
-            if (t != null) TUNNEL_REGISTRY.setRelay(t, relay);
+            if (t != null) tunnels.setRelay(t, relay);
         }
 
         void addRemoteIce(String candidate, String mid) {
@@ -761,9 +761,9 @@ public class WebRtcHost {
                             // 실제 원격 식별자를 레지스트리에 매핑해 둔다 (TunnelInjector가 교체).
                             tunnelLocalPort =
                                     ((InetSocketAddress) sock.getLocalAddress()).getPort();
-                            this.tunnel = TUNNEL_REGISTRY.register(sock.getLocalAddress(), this.clientIp, this.sid);
+                            this.tunnel = tunnels.register(sock.getLocalAddress(), this.clientIp, this.sid);
                             Boolean r = relayResult;
-                            if (r != null) TUNNEL_REGISTRY.setRelay(this.tunnel, r);
+                            if (r != null) tunnels.setRelay(this.tunnel, r);
                             // DC→TCP: 전담 writer 스레드가 연속 청크를 writev 1회로 배칭
                             w = new BatchPipe.Writer(sock,
                                     "webrtc-host-tcpw-" + sid,
@@ -847,7 +847,7 @@ public class WebRtcHost {
             tcpWriter = null;
             if (w != null) w.close();
             if (tunnelLocalPort > 0) {
-                TUNNEL_REGISTRY.unregister(tunnel);
+                tunnels.unregister(tunnel);
                 this.tunnel = null;
                 tunnelLocalPort = -1;
             }

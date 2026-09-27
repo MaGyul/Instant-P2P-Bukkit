@@ -1,10 +1,8 @@
 package dev.magyul.instantp2p.webrtc;
 
-import dev.magyul.instantp2p.InstantP2pBukkit;
 import dev.magyul.instantp2p.Utils;
-import org.bukkit.Bukkit;
-import org.bukkit.OfflinePlayer;
-import org.bukkit.entity.Player;
+import dev.magyul.instantp2p.core.P2PPlatform;
+import dev.magyul.instantp2p.core.P2PSettings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,7 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * 공개 방 목록 — 새 서버 인프라 없이 기존 시그널링 relay의 lobby/peer 메커니즘을 재사용한다.
  * <p>
  * {@link WebRtcHost}가 방마다 여는 {@code /{roomId}} lobby(조인 감지용)와는 별개로, 공개 방을 연
- * 호스트는 자기 채널마다 결정되는 샤드 lobby({@link P2PConfig#publicRoomsLobbyId(String, int)},
+ * 호스트는 자기 채널마다 결정되는 샤드 lobby({@link P2PConfig#publicRoomsLobbyId(String, int, String)},
  * {@link P2PConfig#publicRoomShardFor(String)} 참고)에 {@code "r" + 방코드}라는 짧고 고정된 이름의
  * peer로 접속해 둔다. 방 목록 화면({@link PublicRoomBrowser})은 자기 채널들의 lobby에 동시 접속해서
  * "r" 접두사 peer들(=지금 열려 있는 공개 방들)을 훑어본다 — 호스트가 방을 닫으면 이 WebSocket
@@ -57,6 +55,8 @@ final class PublicRoomAnnouncer {
     private static final long INITIAL_BACKOFF_MS = 2_000;
     private static final long MAX_BACKOFF_MS     = 30_000;
 
+    private final P2PPlatform platform;
+
     private final ScheduledExecutorService scheduler =
             new ScheduledThreadPoolExecutor(1, r -> {
                 Thread t = new Thread(r, "public-room-announce");
@@ -86,7 +86,8 @@ final class PublicRoomAnnouncer {
     /** 방을 연 시각(방장 시계, epoch ms) — 방 목록 정렬용. publish() 참고. */
     private volatile long openedAtMs;
 
-    PublicRoomAnnouncer() {
+    PublicRoomAnnouncer(P2PPlatform platform) {
+        this.platform = platform;
         scheduler.scheduleWithFixedDelay(() -> {
             if (running && SignalingRtt.bars(SignalingRtt.currentMs()) != SignalingRtt.bars(announcedRttMs)) {
                 sendUpdate();
@@ -111,7 +112,7 @@ final class PublicRoomAnnouncer {
         this.currentPlayers = currentPlayers;
         this.maxPlayers = maxPlayers;
 
-        List<String> channels = InstantP2pBukkit.INSTANCE.config.getEffectiveChannels();
+        List<String> channels = platform.settings().effectiveChannels();
         if (firstTime || !channels.equals(connectedChannels)) {
             this.backoffMs = INITIAL_BACKOFF_MS;
             int gen = generation.incrementAndGet();
@@ -154,10 +155,10 @@ final class PublicRoomAnnouncer {
             if (!running) return;
             long rtt = SignalingRtt.currentMs();
             announcedRttMs = rtt;
-            String msg = VillasMsg.roomUpdate(roomCode, title, hostNickname, InstantP2pBukkit.INSTANCE.config.announcedChannel(),
-                    InstantP2pBukkit.INSTANCE.config.isChannelAnd(), currentPlayers, maxPlayers, P2PConfig.mcVersion(),
-                    hostUuid, Utils.encodePlayerHashes(Bukkit.getBannedPlayers().stream().map(OfflinePlayer::getUniqueId).toList(),
-                            roomCode), rtt, openedAtMs);
+            P2PSettings settings = platform.settings();
+            String msg = VillasMsg.roomUpdate(roomCode, title, hostNickname, settings.announcedChannel(),
+                    settings.channelAnd(), currentPlayers, maxPlayers, platform.minecraftVersion(),
+                    hostUuid, Utils.encodePlayerHashes(platform.bannedPlayers(), roomCode), rtt, openedAtMs);
             for (WebSocketClient client : ws) client.send(msg);
         });
     }
@@ -179,7 +180,7 @@ final class PublicRoomAnnouncer {
         int shard = P2PConfig.publicRoomShardFor(roomCode);
         List<WebSocketClient> clients = new ArrayList<>();
         for (String channel : channels) {
-            clients.add(newClient(gen, P2PConfig.publicRoomsLobbyId(channel, shard)));
+            clients.add(newClient(gen, P2PConfig.publicRoomsLobbyId(channel, shard, platform.settings().targetModVersion())));
         }
         ws = List.copyOf(clients);
         for (WebSocketClient client : clients) {

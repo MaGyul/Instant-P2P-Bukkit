@@ -1,12 +1,6 @@
 package dev.magyul.instantp2p;
 
 import com.google.common.net.InetAddresses;
-import dev.magyul.instantp2p.i18n.I18n;
-import io.netty.buffer.Unpooled;
-import net.minecraft.network.FriendlyByteBuf;
-import org.bukkit.Bukkit;
-import org.bukkit.OfflinePlayer;
-import org.bukkit.entity.Player;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -14,22 +8,12 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.util.Collection;
-import java.util.List;
 import java.util.Random;
 import java.util.UUID;
 
 public class Utils {
     private static final Random RANDOM = new Random();
     private static final String CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-
-    public static void sendAdministratorMessage(String translationKey) {
-        InstantP2pBukkit.LOGGER.info(I18n.translatableStr(translationKey));
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            if (player.hasPermission("instantp2p.notify.host")) {
-                player.sendMessage(I18n.translatable(translationKey));
-            }
-        }
-    }
 
     public static String encodePlayerHashes(Collection<UUID> players, String roomCode) {
         return String.join(",", players.stream().map(player -> {

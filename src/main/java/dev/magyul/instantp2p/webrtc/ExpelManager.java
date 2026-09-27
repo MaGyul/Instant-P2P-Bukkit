@@ -1,26 +1,16 @@
 package dev.magyul.instantp2p.webrtc;
 
 import dev.magyul.instantp2p.DevBadge;
-import dev.magyul.instantp2p.InstantP2pBukkit;
-import dev.magyul.instantp2p.i18n.I18n;
-import dev.magyul.instantp2p.network.P2PNet;
-import net.kyori.adventure.text.Component;
-import org.bukkit.Server;
-import org.bukkit.entity.Player;
+import dev.magyul.instantp2p.core.P2PPlatform;
+import dev.magyul.instantp2p.network.packet.Moderation;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-//? if >=26.1 {
-/*import net.minecraft.network.chat.Component;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerPlayer;
-*///?} else {
-//?}
-
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-
-import static dev.magyul.instantp2p.InstantP2pBukkit.LOGGER;
 
 /**
  * 개발자·서포터·방송인이 인게임에서 "차단"(BlockedPlayersScreen의 ❌ 버튼, 곧 P2PBanManager.banPlayer)한
@@ -61,16 +51,20 @@ import static dev.magyul.instantp2p.InstantP2pBukkit.LOGGER;
  */
 public final class ExpelManager {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger("Instant-P2P");
+
     /** 추방 대상 UUID → 그 추방을 건 사람들(등급자) UUID 집합. 비어있으면(또는 키가 없으면) 추방
      * 상태 아님 — P2PBanManager.checkCanJoin이 재입장을 거부할 때, 그리고 onDisconnect가 나가는
      * 사람이 걸어둔 추방을 풀 때 이 맵을 본다. */
-    private static final Map<UUID, Set<UUID>> holders = new ConcurrentHashMap<>();
+    private final Map<UUID, Set<UUID>> holders = new ConcurrentHashMap<>();
 
-    private ExpelManager() {}
+    private final P2PPlatform platform;
+    /** 방 상태 요청(ACTION_REQUEST_STATE)에 답하는 방법 */
+    private final Runnable broadcastRoomState;
 
-    private static boolean isHost(Player target) {
-        return target.getUniqueId().equals(InstantP2pBukkit.INSTANCE.config.getServerUUID())
-                || target.hasPermission("instantp2p.host");
+    public ExpelManager(P2PPlatform platform, Runnable broadcastRoomState) {
+        this.platform = platform;
+        this.broadcastRoomState = broadcastRoomState;
     }
 
     /** 개발자 3 &gt; 서포터 2 &gt; 방송인 1 &gt; 무등급 0. 역할 판정·우선순위는 DevBadge.roleSuffix
@@ -86,54 +80,53 @@ public final class ExpelManager {
         };
     }
 
-    /** 지금 이 UUID가 추방 상태라 재입장이 막혀야 하는지 — P2PBanManager.checkCanJoin에서 부른다. */
-    public static boolean isExpelled(UUID id) {
+    /** 지금 이 UUID가 추방 상태라 재입장이 막혀야 하는지 — 로그인 전 검사에서 부른다. */
+    public boolean isExpelled(UUID id) {
         Set<UUID> h = holders.get(id);
         return h != null && !h.isEmpty();
     }
 
     /** 요청 하나를 등급 검사 후 실행한다 — 서버(방장) 스레드에서만 불린다. */
-    public static void handleRequest(Server server, Player sender, int action, UUID target) {
+    public void handleRequest(UUID sender, int action, UUID target) {
         // 방 상태 요청은 등급과 무관하다 — 누구나 자기 화면을 맞추려고 보낼 수 있다.
-        if (action == P2PNet.ACTION_REQUEST_STATE) {
-            P2PNet.broadcastRoomState(server);
+        if (action == Moderation.ACTION_REQUEST_STATE) {
+            broadcastRoomState.run();
             return;
         }
         // 내 등급이 상대보다 "엄격히" 높아야만 통과 — <=로 걸어서 동급끼리(둘 다 방송인끼리 등)
         // 서로 추방하는 것도 막는다. 등급 0(무등급)은 상대가 몇 등급이든 항상 0<=priority(target)이라
         // 자동으로 걸러진다(따로 0 체크를 안 해도 됨). 방장은 등급과 무관하게 최상위다.
-        int senderPriority = isHost(sender) ? 4 : priority(sender.getPlayerProfile().getId());
+        int senderPriority = platform.isHost(sender) ? 4 : priority(sender);
         if (senderPriority <= priority(target)) return;
         // 스트리머 등급(1)의 추방·강퇴 권한은 방송 허용 방에서만 유효 — 방송 중인 스트리머 보호가
         // 목적이다(CustomRoomScreen의 스트리머 보호 안내 팝업 참고). 해제는 막지 않는다 — 방송
         // 허용을 중간에 껐다고 이미 추방한 사람을 영영 못 풀게 되면 안 된다. 개발자·서포터는 무관하게 그대로.
-        if (action != P2PNet.ACTION_READMIT && senderPriority == 1 && !InstantP2pBukkit.INSTANCE.config.isAllowBroadcast()) return;
-        dispatch(server, sender.getPlayerProfile().getId(), action, target);
+        if (action != Moderation.ACTION_READMIT && senderPriority == 1 && !platform.settings().allowBroadcast()) return;
+        dispatch(sender, action, target);
     }
 
     /** 등급 검사를 통과한(또는 방장 본인의) 요청을 실제로 실행한다. */
-    private static void dispatch(Server server, UUID senderUuid, int action, UUID target) {
+    private void dispatch(UUID senderUuid, int action, UUID target) {
         switch (action) {
-            case P2PNet.ACTION_EXPEL -> expel(senderUuid, target, server);
-            case P2PNet.ACTION_READMIT -> readmit(senderUuid, target, server);
-            case P2PNet.ACTION_KICK -> kick(senderUuid, target, server);
+            case Moderation.ACTION_EXPEL -> expel(senderUuid, target);
+            case Moderation.ACTION_READMIT -> readmit(senderUuid, target);
+            case Moderation.ACTION_KICK -> kick(senderUuid, target);
             default -> { }
         }
     }
 
-    private static void expel(UUID expellerUuid, UUID targetUuid, Server server) {
-        Player target = server.getPlayer(targetUuid);
-        if (target != null && isHost(target)) return;
+    private void expel(UUID expellerUuid, UUID targetUuid) {
+        // 오프라인 대상도 기록한다 — 클라이언트가 접속 때마다 차단 목록을 다시 보낸다.
+        boolean online = platform.isOnline(targetUuid);
+        if (online && platform.isHost(targetUuid)) return;
         boolean alreadyExpelled = isExpelled(targetUuid);
         holders.computeIfAbsent(targetUuid, k -> ConcurrentHashMap.newKeySet()).add(expellerUuid);
-        if (alreadyExpelled || target == null) return;
-        Player expeller = server.getPlayer(expellerUuid);
-        target.kick(I18n.translatable("instant-p2p.msg.expelled_by",
-                expeller != null ? expeller.name() : Component.text("?")));
+        if (alreadyExpelled || !online) return;
+        platform.kick(targetUuid, "instant-p2p.msg.expelled_by", nameOrUnknown(expellerUuid));
         LOGGER.info("[expel] {} expelled by {}", targetUuid, expellerUuid);
     }
 
-    private static void readmit(UUID expellerUuid, UUID targetUuid, Server server) {
+    private void readmit(UUID expellerUuid, UUID targetUuid) {
         Set<UUID> h = holders.get(targetUuid);
         if (h == null) return;
         h.remove(expellerUuid);
@@ -144,19 +137,21 @@ public final class ExpelManager {
 
     /** 추방과 달리 holders에 아무 것도 남기지 않는 1회성 강퇴 — 재입장은 막지 않는다
      * (BlockedPlayersScreen 3번째 버튼, "물갈이"용). 방장은 추방과 같은 이유로 대상에서 제외. */
-    private static void kick(UUID kickerUuid, UUID targetUuid, Server server) {
-        Player target = server.getPlayer(targetUuid);
-        if (target == null || isHost(target)) return;
-        Player kicker = server.getPlayer(kickerUuid);
-        target.kick(I18n.translatable("instant-p2p.msg.kicked_by",
-                kicker != null ? kicker.name() : Component.text("?")));
+    private void kick(UUID kickerUuid, UUID targetUuid) {
+        if (!platform.isOnline(targetUuid) || platform.isHost(targetUuid)) return;
+        platform.kick(targetUuid, "instant-p2p.msg.kicked_by", nameOrUnknown(kickerUuid));
         LOGGER.info("[expel] {} kicked by {}", targetUuid, kickerUuid);
     }
 
-    public static void onDisconnect(Server server, Player player) {
-        UUID leaving = player.getUniqueId();
-        for (UUID target : java.util.List.copyOf(holders.keySet())) {
-            readmit(leaving, target, server);
+    /** 나가는 사람이 걸어둔 추방을 푼다. */
+    public void onDisconnect(UUID leaving) {
+        for (UUID target : List.copyOf(holders.keySet())) {
+            readmit(leaving, target);
         }
+    }
+
+    private String nameOrUnknown(UUID id) {
+        String name = platform.playerName(id);
+        return name != null ? name : "?";
     }
 }

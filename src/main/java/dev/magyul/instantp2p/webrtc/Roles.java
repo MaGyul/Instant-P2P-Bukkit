@@ -22,7 +22,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static dev.magyul.instantp2p.InstantP2pBukkit.LOGGER;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 개발자·서포터·방송인 UUID 목록 — mc-signaling의 {@code GET /api/v1/roles}에서 받아온다.
@@ -43,6 +44,8 @@ import static dev.magyul.instantp2p.InstantP2pBukkit.LOGGER;
  * 로컬에 사람이 편집 가능한 파일을 남기고 싶지 않다는 게 이 설계의 요지.
  */
 public final class Roles {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger("Instant-P2P");
 
     private static final Gson GSON = new GsonBuilder().create();
     private static final Duration HTTP_TIMEOUT = Duration.ofSeconds(5);
@@ -157,8 +160,8 @@ public final class Roles {
         }
     }
 
-    /** @return 세 목록 중 하나라도 실제로 달라졌으면 true. */
-    private static boolean apply(String json) {
+    /** @return 세 목록 중 하나라도 실제로 달라졌으면 true. 서명 검증은 호출부에서 끝낸 상태여야 한다(테스트용으로 패키지 공개). */
+    static boolean apply(String json) {
         JsonObject o;
         try {
             o = GSON.fromJson(json, JsonObject.class);

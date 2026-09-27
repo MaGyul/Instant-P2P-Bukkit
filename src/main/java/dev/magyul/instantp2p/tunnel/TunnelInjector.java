@@ -15,8 +15,8 @@ import net.minecraft.network.Connection;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerConnectionListener;
 
-import static dev.magyul.instantp2p.InstantP2pBukkit.LOGGER;
-import static dev.magyul.instantp2p.InstantP2pBukkit.TUNNEL_REGISTRY;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * PlayerManagerMixin 대체.
@@ -30,6 +30,8 @@ import static dev.magyul.instantp2p.InstantP2pBukkit.TUNNEL_REGISTRY;
  */
 
 public final class TunnelInjector {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger("Instant-P2P");
 
     public static final AttributeKey<TunnelRegistry.Tunnel> TUNNEL =
             AttributeKey.valueOf("instantp2p:tunnel");
@@ -53,10 +55,12 @@ public final class TunnelInjector {
     }
 
     private static final List<Channel> injected = new ArrayList<>();
+    private static volatile TunnelRegistry registry;
 
     /** onEnable에서 호출. 서버 포트가 바인딩된 이후여야 한다(기본 load: POSTWORLD면 OK). */
     @SuppressWarnings("unchecked")
-    public static void inject() throws ReflectiveOperationException {
+    public static void inject(TunnelRegistry tunnels) throws ReflectiveOperationException {
+        registry = tunnels;
         ServerConnectionListener listener = MinecraftServer.getServer().getConnection();
         List<ChannelFuture> futures = (List<ChannelFuture>) CHANNELS_FIELD.get(listener);
 
@@ -103,7 +107,8 @@ public final class TunnelInjector {
         public void channelRead(ChannelHandlerContext ctx, Object msg) {
             try {
                 SocketAddress remote = ctx.channel().remoteAddress();
-                TUNNEL_REGISTRY.byRemote(remote).ifPresent(t -> swap(ctx, t));
+                TunnelRegistry tunnels = registry;
+                if (tunnels != null) tunnels.byRemote(remote).ifPresent(t -> swap(ctx, t));
             } catch (Throwable e) {
                 LOGGER.warn("[tunnel] address swap failed", e);
             } finally {

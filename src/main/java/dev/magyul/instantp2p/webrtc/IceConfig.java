@@ -1,6 +1,5 @@
 package dev.magyul.instantp2p.webrtc;
 
-import dev.magyul.instantp2p.InstantP2pBukkit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tel.schich.libdatachannel.PeerConnectionConfiguration;
@@ -17,7 +16,7 @@ import java.util.Set;
  * 호스트/조인 공용 ICE 구성 빌더.
  *
  * <p><b>TURN 전용 모드</b> ({@code -Dkfcudp.ice.relayonly=true}):
- * {@link P2PConfig#isRelayOnly()} 가 true 면
+ * {@code relayOnly} 설정이 true 면
  * <ul>
  *   <li>{@code iceTransportPolicy = RELAY} — host/srflx 후보를 아예 수집하지 않는다.
  *       즉 직결(Direct)·홀펀칭 경로가 생성되지 않고 모든 트래픽이 TURN 릴레이를 통과한다.</li>
@@ -40,7 +39,7 @@ import java.util.Set;
  * 같은 단계로 맞춰서 재시도해야 한다 — 조인자가 보내는 OFFER 재협상 횟수로
  * 호스트가 단계를 유추한다({@link WebRtcHost.PairSignal} 참고).
  * <p>
- * 예외: 나 또는 상대가 이미 중계 강제({@link P2PConfig#isRelayOnly()})라면 1차는
+ * 예외: 나 또는 상대가 이미 중계 강제({@code relayOnly})라면 1차는
  * 어차피 실패가 확정이므로 아예 건너뛴다. 호스트는 페어 세션 peer 이름에 자기
  * 강제 여부를 실어 보내고, 조인자는 그 값을 호스트 등장 감지와 동시에 읽어서
  * {@code WebRtcClient.acceptAndBridge}에서 1차 없이 바로 릴레이 허용으로 1번만
@@ -64,9 +63,9 @@ final class IceConfig {
      * @param allowRelay false면 TURN 후보를 아예 만들지 않는다 — "직결 우선 시도" 1단계용.
      *                    host/srflx 후보만 만들어지므로 릴레이 pair가 애초에 존재할 수 없다.
      *                    relay-only 설정이면 이 값과 무관하게 강제로 릴레이 전용이 된다.
+     * @param relayOnly  relayOnly 설정 — 모든 트래픽을 TURN으로 보낸다.
      */
-    static PeerConnectionConfiguration build(List<String[]> relays, String tag, boolean allowRelay) {
-        final boolean relayOnly = InstantP2pBukkit.INSTANCE.config.isRelayOnly();
+    static PeerConnectionConfiguration build(List<String[]> relays, String tag, boolean allowRelay, boolean relayOnly) {
         if (relayOnly) allowRelay = true;
 
         List<URI> servers = new ArrayList<>();
