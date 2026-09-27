@@ -1,54 +1,36 @@
 plugins {
-    id("java-library")
-    id("io.papermc.paperweight.userdev") version "2.0.0-beta.21"
-    id("xyz.jpenilla.run-paper") version "3.1.0"
+    id("com.gradleup.shadow") version "9.2.2" apply false
+    id("xyz.jpenilla.run-paper") version "3.1.0" apply false
 }
 
-repositories {
-    mavenCentral()
-    maven("https://repo.papermc.io/repository/maven-public/")
-}
+subprojects {
+    apply(plugin = "java-library")
 
-val libdatachannelVersion = "0.24.1.1"
+    repositories {
+        mavenCentral()
+        maven("https://repo.papermc.io/repository/maven-public/")
+    }
 
-dependencies {
-    paperweight.paperDevBundle("1.21.11-R0.1-SNAPSHOT")
-    compileOnly ("tel.schich:libdatachannel-java:${libdatachannelVersion}")
+    extensions.configure<JavaPluginExtension> {
+        toolchain.languageVersion = JavaLanguageVersion.of(21)
+    }
 
-    testImplementation(platform("org.junit:junit-bom:5.11.4"))
-    testImplementation("org.junit.jupiter:junit-jupiter")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-}
+    tasks.withType<JavaCompile>().configureEach {
+        options.encoding = "UTF-8"
+        options.release = 21
+    }
 
-java {
-    toolchain.languageVersion = JavaLanguageVersion.of(21)
-}
+    dependencies {
+        "testImplementation"(platform("org.junit:junit-bom:5.11.4"))
+        "testImplementation"("org.junit.jupiter:junit-jupiter")
+        "testRuntimeOnly"("org.junit.platform:junit-platform-launcher")
+    }
 
-// 1.20.5+ Paper는 Mojang 매핑 런타임이라 reobf가 필요 없음
-paperweight.reobfArtifactConfiguration =
-    io.papermc.paperweight.userdev.ReobfArtifactConfiguration.MOJANG_PRODUCTION
-
-tasks {
-    test {
+    tasks.withType<Test>().configureEach {
         useJUnitPlatform()
-        // 서버 클래스패스의 log4j가 작업 디렉터리에 logs/를 만들므로 build 아래에서 돌린다
+        // 서버 클래스패스의 log4j 등이 작업 디렉터리에 logs/를 만들 수 있어 build 아래에서 돌린다
         val workDir = layout.buildDirectory.dir("test-work").get().asFile
         workingDir = workDir
         doFirst { workDir.mkdirs() }
-    }
-
-    runServer {
-        minecraftVersion("1.21.11")
-        jvmArgs("-Xms2G", "-Xmx2G")
-    }
-
-    processResources {
-        val props = mapOf(
-            "version" to version,
-            "libdatachannelVersion" to libdatachannelVersion)
-        inputs.properties(props)
-        filesMatching(listOf("paper-plugin.yml", "instantp2p-libs.properties")) {
-            expand(props)
-        }
     }
 }
