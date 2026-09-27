@@ -153,5 +153,6 @@
   "instant-p2p.msg.perk_note": " §f(정원 무시하고 접속 가능)",
   "instant-p2p.msg.expel_note": "\n§7(플레이어 차단 화면에서 강퇴·임시밴 가능)",
   "instant-p2p.msg.signaling_unreachable": "§c서버 점검 중입니다 §f(시그널링 연결 실패) §c— 재시도 중, 복구까지 접속이 안 될 수 있습니다",
-  "instant-p2p.msg.signaling_recovered": "§a시그널링 서버에 다시 연결되었습니다"
+  "instant-p2p.msg.signaling_recovered": "§a시그널링 서버에 다시 연결되었습니다",
+  "instant-p2p.msg.ip_restore_unavailable": "§c[instant-p2p] 이 서버 버전에서는 접속자 IP 복원을 할 수 없어 꺼졌습니다. 접속은 정상입니다. 서버 종류·버전과 함께 개발자에게 문의해 주세요."
 }

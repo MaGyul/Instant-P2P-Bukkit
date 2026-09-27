@@ -24,11 +24,15 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class P2PCore {
 
+    /** IP 복원(TunnelInjector)을 못 하게 됐을 때 관리자에게 보내는 번역 키 */
+    public static final String IP_RESTORE_UNAVAILABLE = "instant-p2p.msg.ip_restore_unavailable";
+
     private final P2PPlatform platform;
     private final TunnelRegistry tunnels = new TunnelRegistry();
     private final Set<UUID> onlinePlayers = ConcurrentHashMap.newKeySet();
     private final ExpelManager expel;
     private final WebRtcBridge bridge;
+    private volatile boolean ipRestoreUnavailable;
 
     public P2PCore(P2PPlatform platform) {
         this.platform = platform;
@@ -41,6 +45,17 @@ public final class P2PCore {
     public TunnelRegistry tunnels() { return tunnels; }
     public ExpelManager expel() { return expel; }
     public WebRtcBridge bridge() { return bridge; }
+
+    /** IP 복원이 꺼진 상태인지 — 관리자가 입장할 때마다 다시 알린다. */
+    public boolean ipRestoreUnavailable() {
+        return ipRestoreUnavailable;
+    }
+
+    /** 아무 스레드. IP 복원을 못 하게 됐다 — 접속은 되지만 밴/IP밴/throttle이 127.0.0.1 기준이 된다. */
+    public void markIpRestoreUnavailable() {
+        ipRestoreUnavailable = true;
+        platform.runSync(() -> platform.notifyAdmins(IP_RESTORE_UNAVAILABLE));
+    }
 
     /** 스레드 안전한 스냅샷 */
     public Collection<UUID> onlinePlayers() {

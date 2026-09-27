@@ -46,6 +46,9 @@ final class InstantP2pListener implements Listener {
             event.joinMessage(joinMessage.appendSpace().append(PaperText.translatable(key)));
         });
         core.onJoin(p.getUniqueId());
+        if (core.ipRestoreUnavailable() && p.hasPermission("instantp2p.notify.host")) {
+            p.sendMessage(PaperText.translatable(P2PCore.IP_RESTORE_UNAVAILABLE));
+        }
     }
 
     @EventHandler

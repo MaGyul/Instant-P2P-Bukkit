@@ -39,14 +39,14 @@ public final class InstantP2pBukkit extends JavaPlugin {
         PaperPlatform platform = new PaperPlatform(this, settings);
         core = new P2PCore(platform);
 
-        try {
-            TunnelInjector.inject(core.tunnels());
-            P2PNet.register(this, core);
-        } catch (ReflectiveOperationException e) {
-            LOGGER.error("네트워크 셋팅에 실패했습니다! 플러그인이 비활성화됩니다.", e);
-            Bukkit.getPluginManager().disablePlugin(this);
-            return;
+        // IP 복원은 실패해도 접속은 되므로 플러그인을 끄지 않는다 (관리자에게만 알림)
+        Object minecraftServer = minecraftServer();
+        if (minecraftServer == null) {
+            core.markIpRestoreUnavailable();
+        } else {
+            TunnelInjector.inject(minecraftServer, core.tunnels(), core::markIpRestoreUnavailable);
         }
+        P2PNet.register(this, core);
 
         Bukkit.getPluginManager().registerEvents(new InstantP2pListener(core), this);
 
@@ -73,6 +73,17 @@ public final class InstantP2pBukkit extends JavaPlugin {
                         getServer().getOnlinePlayers().size(), getServer().getMaxPlayers());
             }
         });
+    }
+
+    /** CraftServer.getServer() → MinecraftServer(DedicatedServer). Paper/Spigot 공통, 이름은 Bukkit 구현 쪽이라 매핑과 무관. */
+    private Object minecraftServer() {
+        try {
+            Object craftServer = Bukkit.getServer();
+            return craftServer.getClass().getMethod("getServer").invoke(craftServer);
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            LOGGER.error("[tunnel] MinecraftServer 인스턴스를 얻지 못했습니다 — IP 복원을 끕니다 (접속은 됩니다)", e);
+            return null;
+        }
     }
 
     @Override

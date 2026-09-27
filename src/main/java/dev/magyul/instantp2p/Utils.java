@@ -35,6 +35,13 @@ public class Utils {
         return sb.toString();
     }
 
+    /**
+     * 시그널링이 준 접속자 식별자 → 서버에 보여줄 주소. 리터럴 IP면 그대로, 익명 토큰(ip-xxxx)이면
+     * SHA-256으로 240.0.0.0/4(예약 대역) 합성 IPv4를 만든다. 첫 옥텟은 240~254라 브로드캐스트가 나오지 않는다.
+     * <p>
+     * IPv6(fd00::/8)를 쓰지 않는 이유: 바닐라 IP 밴 검사는 주소 문자열을 첫 ':'에서 잘라 IPv6를 못 읽고,
+     * /ban-ip·/pardon-ip 인자(Brigadier word)는 ':'를 받지 않는다.
+     */
     public static InetAddress toPeerAddress(String peer) {
         String s = (peer.startsWith("[") && peer.endsWith("]"))
                 ? peer.substring(1, peer.length() - 1) : peer;
@@ -43,9 +50,7 @@ public class Utils {
         }
         try {
             byte[] h = MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8));
-            byte[] a = new byte[16];
-            a[0] = (byte) 0xfd;
-            System.arraycopy(h, 0, a, 1, 15);
+            byte[] a = {(byte) (240 + (h[0] & 0xFF) % 15), h[1], h[2], h[3]};
             return InetAddress.getByAddress(a);   // byte[] 버전은 DNS 조회 안 함
         } catch (GeneralSecurityException | UnknownHostException e) {
             throw new IllegalStateException(e);
