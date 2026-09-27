@@ -155,7 +155,7 @@ final class PublicRoomAnnouncer {
             long rtt = SignalingRtt.currentMs();
             announcedRttMs = rtt;
             String msg = VillasMsg.roomUpdate(roomCode, title, hostNickname, InstantP2pBukkit.INSTANCE.config.announcedChannel(),
-                    InstantP2pBukkit.INSTANCE.config.isChannelAnd(), currentPlayers, maxPlayers, P2PConfig.MC_VERSION,
+                    InstantP2pBukkit.INSTANCE.config.isChannelAnd(), currentPlayers, maxPlayers, P2PConfig.mcVersion(),
                     hostUuid, Utils.encodePlayerHashes(Bukkit.getBannedPlayers().stream().map(OfflinePlayer::getUniqueId).toList(),
                             roomCode), rtt, openedAtMs);
             for (WebSocketClient client : ws) client.send(msg);

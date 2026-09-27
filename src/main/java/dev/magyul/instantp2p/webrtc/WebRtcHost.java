@@ -152,7 +152,7 @@ public class WebRtcHost {
         if (!running.get()) return;
         // peer 이름은 접속마다 유니크하게 — 서버는 같은 이름의 재접속을
         // "peer is already connected"로 거부하므로 (연결 유실 직후 재접속 대비)
-        String peerName = "h" + Integer.toHexString(
+        String peerName = PeerNames.lobbyHost(
                 java.util.concurrent.ThreadLocalRandom.current().nextInt(0x10000, 0x100000));
         WebSocketClient ws = new WebSocketClient(
                 P2PConfig.SIGNALING_URL + "/" + roomId + "/" + peerName) {
@@ -229,19 +229,20 @@ public class WebRtcHost {
             // 강제 글자는 WebRtcClient.announceJoin()이 실어 보낸다 — 조인자가 이미 중계
             // 강제 중이면 호스트가 굳이 1차(직결 전용)부터 시도해서 실패시킬 필요 없이
             // 처음부터 릴레이 허용으로 응답할 수 있다(PairSignal.handlePair 참고).
-            if (name == null || remote == null) continue;
-            if (name.length() != 18 || !name.startsWith("j")) continue;
+            if (remote == null) continue;
+            PeerNames.Join join = PeerNames.parseJoin(name);
+            if (join == null) continue;
             if (handledJoins.putIfAbsent(name, now) != null) continue;
 
             // "jq" = 입장 전 확인(RoomMembersProbe) — 연결하지 않고 지금 접속자 해시만 알려주고 끝낸다.
-            if (name.charAt(1) == 'q') {
-                String probeSid = name.substring(2);
+            if (join.probe()) {
+                String probeSid = join.sid();
                 worker.execute(() -> sendMembers(probeSid));
                 continue;
             }
 
-            boolean clientRelayForced = name.charAt(1) == 'r';
-            String sid = name.substring(2);
+            boolean clientRelayForced = join.relayForced();
+            String sid = join.sid();
             String clientIp = remote.contains(":") ? remote.substring(0, remote.lastIndexOf(':')) : remote;
             // IP는 로그에 남기지 않는다 — 방장이 버그 리포트로 로그를 그대로
             // 공유하면 조인자의 실제 IP가 텍스트로 박제된다. sid로 세션 추적 충분.
@@ -265,7 +266,8 @@ public class WebRtcHost {
      * 서버는 description.type을 그대로 중계하고, 끊는 프레임보다 먼저 온 메시지를 먼저 처리한다. */
     private void sendMembers(String sid) {
         if (!running.get()) return;
-        WebSocketClient w = new WebSocketClient(P2PConfig.SIGNALING_URL + "/" + roomId + "-" + sid + "/hq" + sid) {
+        WebSocketClient w = new WebSocketClient(P2PConfig.SIGNALING_URL + "/"
+                + PeerNames.pairRoom(roomId, sid) + "/" + PeerNames.probeHost(sid)) {
             @Override public void onConnected() {
                 send(VillasMsg.hello());
                 send(VillasMsg.description("members", Utils.encodePlayerHashes(InstantP2pBukkit.INSTANCE.onlinePlayers, roomId)));
@@ -397,9 +399,9 @@ public class WebRtcHost {
         }
 
         private @NonNull WebSocketClient createClient() {
-            String flag = InstantP2pBukkit.INSTANCE.config.isRelayOnly() ? "r" : "d";
-            return new WebSocketClient(
-                    P2PConfig.SIGNALING_URL + "/" + roomId + "-" + sid + "/h" + flag + sid) {
+            boolean relayOnly = InstantP2pBukkit.INSTANCE.config.isRelayOnly();
+            return new WebSocketClient(P2PConfig.SIGNALING_URL + "/"
+                    + PeerNames.pairRoom(roomId, sid) + "/" + PeerNames.pairHost(relayOnly, sid)) {
                 @Override public void onConnected() {
                     send(VillasMsg.hello());
                     LOG.info("[host] pair session joined: sid={}", sid);

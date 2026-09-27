@@ -16,7 +16,11 @@ public class P2PConfig {
     private static final String DEFAULT_CHANNEL = "normal";
     private static final String PUBLIC_ROOMS_LOBBY_PREFIX = "__instant_p2p_public_rooms__";
 
-    public static final String MC_VERSION = Bukkit.getMinecraftVersion();
+    /** room_update.version — 클라이언트가 문자열 비교하므로 실제 서버 버전이어야 한다.
+     * static 초기화로 두면 서버 없이(테스트 등) 이 클래스를 로드할 수 없어 호출 시점에 읽는다. */
+    public static String mcVersion() {
+        return Bukkit.getMinecraftVersion();
+    }
     public static String MOD_VERSION = "1.2.3"; // 당사 개발자에게 어떻게 갈지 의논 (방 표시 여부 때문에)
 
     public static final int MAX_CHANNELS = 5;

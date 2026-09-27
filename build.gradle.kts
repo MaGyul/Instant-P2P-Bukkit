@@ -14,6 +14,10 @@ val libdatachannelVersion = "0.24.1.1"
 dependencies {
     paperweight.paperDevBundle("1.21.11-R0.1-SNAPSHOT")
     compileOnly ("tel.schich:libdatachannel-java:${libdatachannelVersion}")
+
+    testImplementation(platform("org.junit:junit-bom:5.11.4"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 java {
@@ -25,6 +29,14 @@ paperweight.reobfArtifactConfiguration =
     io.papermc.paperweight.userdev.ReobfArtifactConfiguration.MOJANG_PRODUCTION
 
 tasks {
+    test {
+        useJUnitPlatform()
+        // 서버 클래스패스의 log4j가 작업 디렉터리에 logs/를 만들므로 build 아래에서 돌린다
+        val workDir = layout.buildDirectory.dir("test-work").get().asFile
+        workingDir = workDir
+        doFirst { workDir.mkdirs() }
+    }
+
     runServer {
         minecraftVersion("1.21.11")
         jvmArgs("-Xms2G", "-Xmx2G")
