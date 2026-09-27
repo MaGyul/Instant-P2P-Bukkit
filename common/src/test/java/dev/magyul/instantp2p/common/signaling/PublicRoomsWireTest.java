@@ -1,4 +1,4 @@
-package dev.magyul.instantp2p.common.webrtc;
+package dev.magyul.instantp2p.common.signaling;
 
 import dev.magyul.instantp2p.common.core.P2PSettings;
 import org.junit.jupiter.api.Test;
@@ -62,7 +62,6 @@ class PublicRoomsWireTest {
         P2PSettings plain = settings(false);
         assertEquals("normal,pvp", plain.announcedChannel());
         assertEquals("normal,pvp,broadcast", settings(true).announcedChannel());
-        assertTrue(P2PConfig.isBroadcastTagged(settings(true).announcedChannel()));
     }
 
     private static P2PSettings settings(boolean allowBroadcast) {
@@ -71,9 +70,11 @@ class PublicRoomsWireTest {
     }
 
     @Test
-    void broadcastTag() {
-        assertTrue(P2PConfig.isBroadcastTagged("normal, broadcast"));
-        assertFalse(P2PConfig.isBroadcastTagged("normal"));
-        assertEquals("normal", P2PConfig.stripBroadcastTag("normal,broadcast"));
+    void settingsNormalizeChannelsLikeOriginal() {
+        P2PSettings s = new P2PSettings(true, java.util.UUID.randomUUID(), "1.3", "", "Server", true,
+                List.of(" PvP ", "", "pvp"), false, false, false); // 빈 칸은 normal, pvp는 중복
+        assertEquals(List.of("PvP", "normal"), s.channels());
+        assertEquals(List.of("normal"), new P2PSettings(true, java.util.UUID.randomUUID(), "1.3", "", "Server", true,
+                List.of(), false, false, false).channels());
     }
 }

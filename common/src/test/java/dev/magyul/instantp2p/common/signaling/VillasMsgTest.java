@@ -1,4 +1,4 @@
-package dev.magyul.instantp2p.common.webrtc;
+package dev.magyul.instantp2p.common.signaling;
 
 import org.junit.jupiter.api.Test;
 
@@ -62,16 +62,6 @@ class VillasMsgTest {
         assertArrayEquals(new String[]{"h1a2b3", "ip-aaaaaaaaaaaa:1234"}, peers.get(0));
         assertArrayEquals(new String[]{"jd0123456789abcdef", "ip-bbbbbbbbbbbb:5678"}, peers.get(1));
         assertArrayEquals(new String[]{"jq0123456789abcdef", null}, peers.get(2));
-    }
-
-    @Test
-    void parseServers() {
-        String json = "{\"servers\":[{\"url\":\"stun:a:3478\"},"
-                + "{\"url\":\"turn:b:3478\",\"user\":\"u\",\"pass\":\"p\",\"realm\":\"r\",\"expires\":1}]}";
-        List<String[]> servers = VillasMsg.servers(json);
-        assertEquals(2, servers.size());
-        assertArrayEquals(new String[]{"stun:a:3478", null, null}, servers.get(0));
-        assertArrayEquals(new String[]{"turn:b:3478", "u", "p"}, servers.get(1));
     }
 
     @Test

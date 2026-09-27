@@ -1,4 +1,4 @@
-package dev.magyul.instantp2p.common.webrtc;
+package dev.magyul.instantp2p.common.signaling;
 
 /**
  * 시그널링 피어 이름·세션 경로 규칙 (원본 모드 1.3 QUIC과의 와이어 호환 — 바꾸지 말 것).

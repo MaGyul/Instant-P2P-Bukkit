@@ -1,8 +1,9 @@
-package dev.magyul.instantp2p.common.webrtc;
+package dev.magyul.instantp2p.common.core;
 
 import dev.magyul.instantp2p.common.core.P2PPlatform;
 import dev.magyul.instantp2p.common.core.P2PSettings;
 import dev.magyul.instantp2p.common.network.packet.Moderation;
+import dev.magyul.instantp2p.common.signaling.RolesTestAccess;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,7 +34,7 @@ class ExpelManagerTest {
 
     @BeforeEach
     void setUp() {
-        Roles.apply("{\"dev\":[\"" + DEV + "\"],\"supporter\":[\"" + SUPPORTER + "\"],\"streamer\":[\"" + STREAMER + "\"]}");
+        RolesTestAccess.apply("{\"dev\":[\"" + DEV + "\"],\"supporter\":[\"" + SUPPORTER + "\"],\"streamer\":[\"" + STREAMER + "\"]}");
         platform = new FakePlatform(false);
         platform.online.addAll(List.of(HOST, DEV, SUPPORTER, STREAMER, NOBODY, OTHER));
         roomStateRequests = 0;
@@ -42,7 +43,7 @@ class ExpelManagerTest {
 
     @AfterEach
     void tearDown() {
-        Roles.apply("{}");
+        RolesTestAccess.apply("{}");
     }
 
     @Test

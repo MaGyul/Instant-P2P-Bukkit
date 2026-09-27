@@ -1,4 +1,4 @@
-package dev.magyul.instantp2p.common.webrtc;
+package dev.magyul.instantp2p.common.signaling;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -26,22 +26,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * 개발자·서포터·방송인 UUID 목록 — mc-signaling의 {@code GET /api/v1/roles}에서 받아온다.
- * 예전엔 DevBadge 클래스에 UUID가 하드코딩돼 있어서 한 명 추가하려면 모드를 다시 빌드·배포해야
- * 했다 — 이제 운영자가 서버의 roles.json만 SSH로 고치면(재시작도 필요 없다, mc-signaling이
- * 요청마다 파일을 새로 읽는다) 다음 새로고침 때 바로 반영된다.
+ * 개발자·서포터·방송인 UUID 목록 — 시그널링 서버의 {@code GET /api/v1/roles}에서 받아온다(운영자가 roles.json을 고치면 다음 갱신 때 반영).
  * <p>
- * DevNameMixin/DevBadgeMixin이 이름 하나 그릴 때마다 {@link #isDev}/{@link #isSupporter}를
- * 부르지만(매 프레임 가능) 이건 그냥 메모리 Set.contains라 네트워크와 무관 — 실제 새로고침은
- * 주기적 타이머가 아니라 명시적 호출로만 일어난다 — 방을 열거나 들어갈 때
- * ({@code P2PBridge.startHost})의 {@link #refreshAsync()}, 그리고 방장이 접속
- * 요청을 처리하기 직전의 {@link #refreshBlocking}({@code RoomRoles.ensureFreshForLogin})뿐이다.
- * 방을 안 켜고 있는 동안은 네트워크를 아예 안 탄다.
+ * 응답은 시그널링 서버의 Ed25519 서명({@code X-Roles-Signature})이 맞아야 쓴다 — 평문 http라 중간자가 자기 UUID를 끼워 넣을 수 있다.
  * <p>
- * 로컬 파일 캐시는 일부러 안 둔다 — 새로고침이 실패해도(성공했을 때만 덮어쓰므로) 그 세션
- * 안에서는 마지막 성공값이 메모리에 그대로 남아 있어서, 파일로 남기는 이득은 "이번 실행에서
- * 첫 새로고침이 하필 실패하는" 딱 그 경우뿐이다(다음 방을 열면 곧 복구된다) — 그 정도를 아끼자고
- * 로컬에 사람이 편집 가능한 파일을 남기고 싶지 않다는 게 이 설계의 요지.
+ * <b>폴링하지 않는다</b>(원본 개발자 요청). 호스트를 시작할 때 한 번({@link #refreshAsync}), 로그인 때 쿨다운 60초로
+ * ({@link #refreshOnLogin}) 비동기로만 갱신한다. 실패하면 마지막 성공값을 그대로 쓴다. 로컬 파일 캐시는 두지 않는다.
  */
 public final class Roles {
 
@@ -106,34 +96,9 @@ public final class Roles {
                 .thenAccept(changed -> { if (changed) onChanged.run(); });
     }
 
-    /** instant-p2p 방을 열 때(P2PBridge.startHost)만 부른다 —
-     * 그 외엔 배지가 어차피 안 쓰이니 네트워크를 탈 이유가 없다. 백그라운드 스레드에서 돌고 즉시
-     * 리턴하므로 호출부를 막지 않는다. */
+    /** 호스트를 시작할 때(P2PBridge.startHost) 부른다. 백그라운드 스레드에서 돌고 즉시 리턴한다. */
     public static void refreshAsync() {
         EXECUTOR.execute(Roles::refreshNow);
-    }
-
-    /**
-     * 지금 새로고침하고 <b>최대 timeoutMs까지만</b> 기다린다 — 방장이 접속 요청(LOGIN)을 처리하기
-     * 직전에 부른다. 그 순간의 목록으로 정원 무시 입장 허용이 결정되고 탭 목록 배지가 계산돼
-     * 캐시되기 때문에, 여기서 최신값을 못 받으면 "첫 접속만 어긋나고 두 번째 접속부터 맞는"
-     * 증상이 난다(RoomRoles 클래스 주석 참고).
-     * <p>
-     * HTTP 자체 타임아웃(5초)만큼 서버 스레드를 붙잡으면 안 되니 전용 스레드에 올리고 여기서만
-     * 짧게 기다린다. 시간이 넘으면 캐시값으로 그냥 진행하고, 뒤늦게 도착한 결과도 onChanged로
-     * 똑같이 반영된다 — 그래서 늦어도 결국은 맞춰진다.
-     */
-    public static void refreshBlocking(long timeoutMs, Runnable onChanged) {
-        java.util.concurrent.CompletableFuture<Boolean> f =
-                java.util.concurrent.CompletableFuture.supplyAsync(Roles::refreshNow, EXECUTOR);
-        f.thenAccept(changed -> {
-            if (changed) onChanged.run();
-        });
-        try {
-            f.get(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS);
-        } catch (Exception e) {
-            LOGGER.warn("[roles] blocking refresh did not finish in {}ms, using cached values", timeoutMs);
-        }
     }
 
     /** @return 목록이 실제로 바뀌었으면 true(실패·무변화는 false). */

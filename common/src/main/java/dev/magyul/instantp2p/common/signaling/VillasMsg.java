@@ -1,4 +1,4 @@
-package dev.magyul.instantp2p.common.webrtc;
+package dev.magyul.instantp2p.common.signaling;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -11,9 +11,9 @@ import java.util.List;
  *   {"control":{"peer_id":N,"peers":[{"name":..,"id":..,"remote":..,..}]}}
  *   {"delta":{"full":bool,"joined":[{"name":..,..}],"left":["name",..]}} ← mc-signaling 전용 확장,
  *       공개 방 목록 lobby에서만 옴(control 대신). full=true면 joined가 "지금 전원"이니 기존 걸
- *       버리고 통째로 갈아끼워야 한다 — PublicRoomBrowser 클래스 주석 참고.
- *   {"description":{"spd":"...","type":"offer|answer"}}   ← 필드명이 "spd" (서버 오타 그대로)
- *   {"candidate":{"spd":"candidate:...","mid":"0"}}
+ *       버리고 통째로 갈아끼워야 한다(원본 PublicRoomBrowser 참고).
+ *   {"description":{"spd":"...","type":"quic-answer|members"}}   ← 필드명이 "spd" (서버 오타 그대로)
+ *   {"candidate":{"spd":"<ip> <port> <type>","mid":"0"}}   ← QUIC 후보 줄 (1.2.x는 SDP candidate)
  *   {"servers":[{"url":..,"user":..,"pass":..,"realm":..,"expires":..}]}
  *   {"room_update":{"code":..,"title":..,..}}                            ← mc-signaling 전용 확장
  * </pre>
@@ -69,35 +69,6 @@ public final class VillasMsg {
         return peerObjects(json, "joined");
     }
 
-    /** delta.left 배열 → 이름 목록(문자열 배열, 객체가 아니다). */
-    static List<String> left(String json) {
-        List<String> out = new ArrayList<>();
-        int k = json.indexOf("\"left\"");
-        if (k < 0) return out;
-        int lb = json.indexOf('[', k);
-        if (lb < 0) return out;
-        int i = lb + 1;
-        while (i < json.length()) {
-            char ch = json.charAt(i);
-            if (ch == ']') break;
-            if (ch == '"') {
-                int start = i + 1, end = start;
-                while (end < json.length() && (json.charAt(end) != '"' || json.charAt(end - 1) == '\\')) end++;
-                out.add(json.substring(start, end).replace("\\\"", "\"").replace("\\\\", "\\"));
-                i = end + 1;
-            } else {
-                i++;
-            }
-        }
-        return out;
-    }
-
-    /** delta.full — true면 joined가 "지금 전원"(기존 걸 버리고 통째로 갈아끼워야 함)이라는 뜻. */
-    static boolean isFullDelta(String json) {
-        String delta = object(json, "delta");
-        return delta != null && "true".equals(field(delta, "full"));
-    }
-
     /** {key: [ {..}, {..} ]} 형태의 오브젝트 배열 → [name, remote] 목록. peers/joined가 공유. */
     private static List<String[]> peerObjects(String json, String key) {
         List<String[]> out = new ArrayList<>();
@@ -114,30 +85,6 @@ public final class VillasMsg {
                 if (--depth == 0) {
                     String obj = json.substring(objStart, i + 1);
                     out.add(new String[]{ field(obj, "name"), field(obj, "remote") });
-                }
-            } else if (ch == ']' && depth == 0) {
-                break;
-            }
-        }
-        return out;
-    }
-
-    /** servers 배열 → [url, user, pass] 목록 */
-    static List<String[]> servers(String json) {
-        List<String[]> out = new ArrayList<>();
-        int k = json.indexOf("\"servers\"");
-        if (k < 0) return out;
-        int lb = json.indexOf('[', k);
-        if (lb < 0) return out;
-        int depth = 0, objStart = -1;
-        for (int i = lb + 1; i < json.length(); i++) {
-            char ch = json.charAt(i);
-            if (ch == '{') {
-                if (depth++ == 0) objStart = i;
-            } else if (ch == '}') {
-                if (--depth == 0) {
-                    String obj = json.substring(objStart, i + 1);
-                    out.add(new String[]{ field(obj, "url"), field(obj, "user"), field(obj, "pass") });
                 }
             } else if (ch == ']' && depth == 0) {
                 break;

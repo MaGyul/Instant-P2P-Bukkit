@@ -1,4 +1,4 @@
-package dev.magyul.instantp2p.common.webrtc;
+package dev.magyul.instantp2p.common.signaling;
 
 import dev.magyul.instantp2p.common.Utils;
 import dev.magyul.instantp2p.common.core.P2PPlatform;
@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * {@link dev.magyul.instantp2p.common.quic.QuicHost}가 방마다 여는 {@code /{roomId}} lobby(조인 감지용)와는 별개로, 공개 방을 연
  * 호스트는 자기 채널마다 결정되는 샤드 lobby({@link P2PConfig#publicRoomsLobbyId(String, int, String)},
  * {@link P2PConfig#publicRoomShardFor(String)} 참고)에 {@code "r" + 방코드}라는 짧고 고정된 이름의
- * peer로 접속해 둔다. 방 목록 화면({@link PublicRoomBrowser})은 자기 채널들의 lobby에 동시 접속해서
+ * peer로 접속해 둔다. 클라이언트의 방 목록 화면(원본 PublicRoomBrowser)은 자기 채널들의 lobby에 동시 접속해서
  * "r" 접두사 peer들(=지금 열려 있는 공개 방들)을 훑어본다 — 호스트가 방을 닫으면 이 WebSocket
  * 연결도 끊어지므로 자동으로 목록에서 사라진다.
  * <p>
@@ -48,7 +48,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * 밴할 때 게임 렌더/서버 스레드가 최대 수십 초 멈출 수 있었다. 이 인스턴스는 P2PBridge 하나에 하나라
  * scheduler를 절대 종료하지 않는다.
  */
-final class PublicRoomAnnouncer {
+public final class PublicRoomAnnouncer {
 
     private static final Logger LOG = LoggerFactory.getLogger("instant-p2p-public");
 
@@ -86,7 +86,7 @@ final class PublicRoomAnnouncer {
     /** 방을 연 시각(방장 시계, epoch ms) — 방 목록 정렬용. publish() 참고. */
     private volatile long openedAtMs;
 
-    PublicRoomAnnouncer(P2PPlatform platform) {
+    public PublicRoomAnnouncer(P2PPlatform platform) {
         this.platform = platform;
         scheduler.scheduleWithFixedDelay(() -> {
             if (running && SignalingRtt.bars(SignalingRtt.currentMs()) != SignalingRtt.bars(announcedRttMs)) {
@@ -96,9 +96,8 @@ final class PublicRoomAnnouncer {
     }
 
     /** 방을 공개 목록에 올리거나(처음 호출) 이미 올라와 있으면 정보를 갱신한다. 방 코드·채널 구성이
-     * 지난 접속과 같으면 재접속 없이 메시지만 보낸다 — hostUuid는 개인 차단(=밴) 기능용(P2PBanManager
-     * 클래스 주석 참고). 접속/재접속은 백그라운드에서 진행되며 즉시 반환. */
-    synchronized void publish(String roomCode, String title, String hostNickname, String hostUuid,
+     * 지난 접속과 같으면 재접속 없이 메시지만 보낸다 — hostUuid는 클라이언트가 자기 차단 목록과 대조하는 데 쓴다. 접속/재접속은 백그라운드에서 진행되며 즉시 반환. */
+    public synchronized void publish(String roomCode, String title, String hostNickname, String hostUuid,
                                int currentPlayers, int maxPlayers) {
         boolean firstTime = !running;
         running = true;
@@ -124,7 +123,7 @@ final class PublicRoomAnnouncer {
         }
     }
 
-    void stop() {
+    public void stop() {
         if (!running) return;
         running = false;
         generation.incrementAndGet();
@@ -137,15 +136,15 @@ final class PublicRoomAnnouncer {
 
     /** 인원 또는 최대 인원이 바뀔 때마다 호출 — 이제 재접속이 아니라 메시지 하나라 디바운스가
      * 필요 없다. 방 설정에서 정원만 바꾼 경우(현재 인원은 그대로)도 여기로 들어온다. */
-    void updatePlayerCount(int current, int max) {
+    public void updatePlayerCount(int current, int max) {
         if (current == this.currentPlayers && max == this.maxPlayers) return;
         this.currentPlayers = current;
         this.maxPlayers = max;
         if (running) sendUpdate();
     }
 
-    /** 밴(=차단) 목록이 바뀌었을 때 P2PBanManager가 호출 — 방이 공개돼 있지 않으면 아무 것도 안 한다. */
-    void republishNow() {
+    /** 밴 목록이 바뀌었을 때 — 방이 공개돼 있지 않으면 아무 것도 안 한다. */
+    public void republishNow() {
         if (running) sendUpdate();
     }
 

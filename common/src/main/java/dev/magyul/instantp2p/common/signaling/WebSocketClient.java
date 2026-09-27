@@ -1,4 +1,4 @@
-package dev.magyul.instantp2p.common.webrtc;
+package dev.magyul.instantp2p.common.signaling;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,7 +22,7 @@ import java.util.Base64;
  */
 public abstract class WebSocketClient {
 
-    private static final Logger LOG = LoggerFactory.getLogger("webrtc-ws");
+    private static final Logger LOG = LoggerFactory.getLogger("signaling-ws");
 
     private static final String WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
     private static final int CONNECT_TIMEOUT_MS   = 10_000; // TCP 연결 + 핸드셰이크 응답 한도
@@ -133,7 +133,7 @@ public abstract class WebSocketClient {
             LOG.debug("[ws] connected to {}", url);
 
             final InputStream fin = in;
-            Thread reader = new Thread(() -> readLoop(fin), "webrtc-ws-read");
+            Thread reader = new Thread(() -> readLoop(fin), "signaling-ws-read");
             reader.setDaemon(true);
             reader.start();
 

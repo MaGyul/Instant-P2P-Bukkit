@@ -4,9 +4,9 @@ import dev.magyul.instantp2p.common.network.PacketByteBuf;
 import dev.magyul.instantp2p.common.network.packet.Moderation;
 import dev.magyul.instantp2p.common.network.packet.RoomState;
 import dev.magyul.instantp2p.common.tunnel.TunnelRegistry;
-import dev.magyul.instantp2p.common.webrtc.ExpelManager;
-import dev.magyul.instantp2p.common.webrtc.Roles;
-import dev.magyul.instantp2p.common.webrtc.P2PBridge;
+import dev.magyul.instantp2p.common.core.ExpelManager;
+import dev.magyul.instantp2p.common.signaling.Roles;
+import dev.magyul.instantp2p.common.core.P2PBridge;
 
 import java.util.Collection;
 import java.util.LinkedHashMap;

@@ -1,7 +1,9 @@
-package dev.magyul.instantp2p.common.webrtc;
+package dev.magyul.instantp2p.common.core;
 
 import dev.magyul.instantp2p.common.core.P2PCore;
 import dev.magyul.instantp2p.common.quic.QuicHost;
+import dev.magyul.instantp2p.common.signaling.PublicRoomAnnouncer;
+import dev.magyul.instantp2p.common.signaling.Roles;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

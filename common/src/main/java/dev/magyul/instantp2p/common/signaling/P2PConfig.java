@@ -1,4 +1,4 @@
-package dev.magyul.instantp2p.common.webrtc;
+package dev.magyul.instantp2p.common.signaling;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -44,25 +44,6 @@ public final class P2PConfig {
         return allowBroadcast ? base + "," + BROADCAST_TAG : base;
     }
 
-    public static boolean isBroadcastTagged(String channelStr) {
-        if (channelStr == null) return false;
-        for (String part : channelStr.split(",")) {
-            if (part.trim().equalsIgnoreCase(BROADCAST_TAG)) return true;
-        }
-        return false;
-    }
-
-    public static String stripBroadcastTag(String channelStr) {
-        if (channelStr == null) return null;
-        StringBuilder out = new StringBuilder();
-        for (String part : channelStr.split(",", -1)) {
-            if (part.trim().equalsIgnoreCase(BROADCAST_TAG)) continue;
-            if (!out.isEmpty()) out.append(',');
-            out.append(part);
-        }
-        return out.toString();
-    }
-
     public static List<String> parseChannels(String text) {
         List<String> out = new ArrayList<>();
         String[] parts = (text == null ? "" : text).split(",", -1);
@@ -83,12 +64,6 @@ public final class P2PConfig {
         if (!and || channels.size() <= 1) return channels;
         return List.of(channels.stream().map(c -> c.toLowerCase(java.util.Locale.ROOT)).sorted()
                 .collect(java.util.stream.Collectors.joining(String.valueOf(AND_SEPARATOR))));
-    }
-
-    public static boolean roomVisible(String hostChannels, boolean hostAnd, List<String> mine, boolean mineAnd) {
-        List<String> host = effectiveChannels(parseChannels(hostChannels), hostAnd);
-        List<String> me = effectiveChannels(mine, mineAnd);
-        return host.stream().anyMatch(h -> me.stream().anyMatch(h::equalsIgnoreCase));
     }
 
     public static int publicRoomShardFor(String roomCode) {
