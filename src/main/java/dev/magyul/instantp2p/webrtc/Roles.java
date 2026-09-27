@@ -17,8 +17,10 @@ import java.util.Base64;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static dev.magyul.instantp2p.InstantP2pBukkit.LOGGER;
 
@@ -72,6 +74,9 @@ public final class Roles {
         return t;
     });
 
+    private static final long LOGIN_REFRESH_COOLDOWN_MS = 60_000;
+    private static final AtomicLong lastLoginRefresh = new AtomicLong();
+
     private Roles() {}
 
     public static boolean isDev(UUID id) {
@@ -84,6 +89,18 @@ public final class Roles {
 
     public static boolean isStreamer(UUID id) {
         return id != null && streamer.contains(id);
+    }
+
+    /**
+     * 로그인 시점 갱신. 쿨다운 안이면 아무것도 안 한다 (전용 서버는 로그인이 잦아서).
+     * 로그인을 막지 않고 비동기로 가져오며, 바뀌었으면 onChanged로 room_state를 다시 보낸다.
+     */
+    public static void refreshOnLogin(Runnable onChanged) {
+        long now = System.currentTimeMillis();
+        long last = lastLoginRefresh.get();
+        if (now - last < LOGIN_REFRESH_COOLDOWN_MS || !lastLoginRefresh.compareAndSet(last, now)) return;
+        CompletableFuture.supplyAsync(Roles::refreshNow, EXECUTOR)
+                .thenAccept(changed -> { if (changed) onChanged.run(); });
     }
 
     /** instant-p2p 방을 열거나(WebRtcBridge.startHost) 들어갈 때(WebRtcBridge.start)만 부른다 —

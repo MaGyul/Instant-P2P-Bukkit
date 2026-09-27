@@ -21,7 +21,7 @@ public class InstantP2pListener implements Listener {
 
     @EventHandler
     public void onPreLogin(AsyncPlayerPreLoginEvent event) {
-        Roles.refreshBlocking(700L, () -> Bukkit.getScheduler().runTask(InstantP2pBukkit.INSTANCE,
+        Roles.refreshOnLogin(() -> Bukkit.getScheduler().runTask(InstantP2pBukkit.INSTANCE,
                 () -> P2PNet.broadcastRoomState(Bukkit.getServer())));
         if (ExpelManager.isExpelled(event.getUniqueId())) {
             event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
