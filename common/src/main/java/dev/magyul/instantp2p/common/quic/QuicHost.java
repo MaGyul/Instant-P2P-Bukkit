@@ -11,6 +11,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tech.kwik.core.QuicConnection;
 import tech.kwik.core.QuicStream;
+import tech.kwik.core.Statistics;
+import tech.kwik.core.send.SendStatistics;
 import tech.kwik.core.server.ApplicationProtocolConnection;
 import tech.kwik.core.server.ApplicationProtocolConnectionFactory;
 import tech.kwik.core.server.ServerConnection;
@@ -101,6 +103,9 @@ public final class QuicHost {
     public void start() throws Exception {
         if (!running.compareAndSet(false, true)) return;
         ServerConnectorImpl.DEFAULT_CLOSE_TIMEOUT_IN_SECONDS = 2;
+        // kwik은 연결이 끝난 뒤 sender 스레드에서 통계 클래스를 처음 로드한다. 종료 때는 그 시점이 플러그인
+        // 비활성화 뒤라 Spigot이 jar를 이미 닫아 "zip file closed"가 난다 → 미리 로드해 둔다.
+        preload(Statistics.class, SendStatistics.class);
         QuicCert.Identity id = QuicCert.generate();
         fingerprint = id.fingerprint();
 
@@ -130,12 +135,23 @@ public final class QuicHost {
             try { c.close(); } catch (Exception ignored) {}
         }
         live.clear();
+        QuicIce agent = ice;
+        // TURN 반납은 소켓이 열려 있을 때 — ServerConnector.close()가 공유 소켓까지 닫는다
+        if (agent != null) agent.releaseTurn();
         ServerConnector s = server;
         if (s != null) s.close();
-        QuicIce agent = ice;
         if (agent != null) agent.close();
         worker.shutdownNow();
         LOG.info("[quic-host] stopped room={} ({}ms)", roomId, System.currentTimeMillis() - t0);
+    }
+
+    private static void preload(Class<?>... classes) {
+        for (Class<?> c : classes) {
+            try {
+                Class.forName(c.getName(), true, c.getClassLoader());
+            } catch (ClassNotFoundException ignored) {
+            }
+        }
     }
 
     // ── 로비 (조인 감지) ──────────────────────────────────────────────────────

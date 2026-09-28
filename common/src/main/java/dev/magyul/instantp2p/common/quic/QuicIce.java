@@ -523,6 +523,14 @@ final class QuicIce {
       }
    }
 
+   /** TURN 할당만 먼저 반납한다 (소켓은 그대로). close()에서 다시 불려도 한 번만 보낸다. */
+   void releaseTurn() {
+      TurnAllocation alloc = this.turn;
+      if (alloc != null) {
+         alloc.close();
+      }
+   }
+
    void close() {
       if (this.closed.compareAndSet(false, true)) {
          TurnAllocation alloc = this.turn;
