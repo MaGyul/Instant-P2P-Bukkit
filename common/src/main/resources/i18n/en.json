@@ -187,5 +187,9 @@
   "instant-p2p-server.reload.done": "§aConfig reloaded",
   "instant-p2p-server.reload.failed": "§cCould not reload the config: %s §7(keeping the previous settings)",
   "instant-p2p-server.reload.udp_port": "§eThe UDP port change applies after reopening the room §7(/p2p close → /p2p open)",
-  "instant-p2p-server.reload.uuid_kept": "§eChanging serverUuid needs a server restart — keeping the previous value for now"
+  "instant-p2p-server.reload.uuid_kept": "§eChanging serverUuid needs a server restart — keeping the previous value for now",
+  "instant-p2p-server.status.players": "§7P2P players (%s): §f%s",
+  "instant-p2p-server.status.players_none": "§7P2P players: none",
+  "instant-p2p-server.status.direct": "direct",
+  "instant-p2p-server.status.relay": "relay"
 }

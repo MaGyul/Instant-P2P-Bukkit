@@ -122,6 +122,13 @@ public class TunnelRegistry {
         if (t != null) t.playerId = null;
     }
 
+    /** 터널로 들어와 있는 플레이어 → 중계 여부 (스냅샷) */
+    public Map<UUID, Boolean> players() {
+        Map<UUID, Boolean> out = new java.util.HashMap<>();
+        byPlayer.forEach((id, t) -> out.put(id, Boolean.TRUE.equals(t.usesRelay)));
+        return out;
+    }
+
     public Optional<Tunnel> byPlayer(UUID playerId) {
         return Optional.ofNullable(byPlayer.get(playerId));
     }

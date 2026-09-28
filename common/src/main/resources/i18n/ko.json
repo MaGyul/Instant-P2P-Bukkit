@@ -187,5 +187,9 @@
   "instant-p2p-server.reload.done": "§a설정을 다시 불러왔습니다",
   "instant-p2p-server.reload.failed": "§c설정을 불러오지 못했습니다: %s §7(이전 설정을 그대로 씁니다)",
   "instant-p2p-server.reload.udp_port": "§eUDP 포트 변경은 방을 다시 열어야 적용됩니다 §7(/p2p close → /p2p open)",
-  "instant-p2p-server.reload.uuid_kept": "§eserverUuid 변경은 서버를 재시작해야 적용됩니다 — 지금은 이전 값을 씁니다"
+  "instant-p2p-server.reload.uuid_kept": "§eserverUuid 변경은 서버를 재시작해야 적용됩니다 — 지금은 이전 값을 씁니다",
+  "instant-p2p-server.status.players": "§7P2P 접속자 %s명: §f%s",
+  "instant-p2p-server.status.players_none": "§7P2P 접속자: 없음",
+  "instant-p2p-server.status.direct": "직결",
+  "instant-p2p-server.status.relay": "중계"
 }

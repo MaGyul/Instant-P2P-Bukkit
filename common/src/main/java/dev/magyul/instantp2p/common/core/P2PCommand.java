@@ -2,9 +2,13 @@ package dev.magyul.instantp2p.common.core;
 
 import dev.magyul.instantp2p.common.auth.HostAccount;
 import dev.magyul.instantp2p.common.auth.MicrosoftAuth;
+import dev.magyul.instantp2p.common.i18n.I18n;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 /**
  * {@code /p2p} 명령어 — 플랫폼은 권한 확인과 인자 전달만 하고 동작은 여기서 정한다.
@@ -71,7 +75,27 @@ public final class P2PCommand {
             case OPENING -> sender.send(K + "status.opening");
             case CLOSED -> sender.send(K + "status.closed");
         }
+        if (host.state() == HostController.RoomState.OPEN) players(core, sender);
         sender.send(K + (core.settings().enabled() ? "status.auto_on" : "status.auto_off"));
+    }
+
+    /** P2P로 들어와 있는 플레이어와 연결 방식 — IP는 보여 주지 않는다(방송 화면에 띄워도 되게) */
+    private static void players(P2PCore core, P2PSender sender) {
+        Map<String, Boolean> byName = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        core.tunnels().players().forEach((id, relay) -> {
+            String name = core.platform().playerName(id);
+            if (name != null) byName.put(name, relay);
+        });
+        if (byName.isEmpty()) {
+            sender.send(K + "status.players_none");
+            return;
+        }
+        String direct = I18n.stripLegacy(I18n.fallback(K + "status.direct"));
+        String relay = I18n.stripLegacy(I18n.fallback(K + "status.relay"));
+        String list = byName.entrySet().stream()
+                .map(e -> e.getKey() + "(" + (e.getValue() ? relay : direct) + ")")
+                .collect(Collectors.joining(", "));
+        sender.send(K + "status.players", byName.size(), list);
     }
 
     private static void login(P2PCore core, P2PSender sender) {
