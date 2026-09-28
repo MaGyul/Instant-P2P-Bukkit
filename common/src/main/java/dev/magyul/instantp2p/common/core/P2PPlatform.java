@@ -17,6 +17,12 @@ public interface P2PPlatform {
 
     P2PSettings settings();
 
+    /** 서버 스레드. 설정 파일을 다시 읽는다 — 적용은 하지 않는다({@link #applySettings}). 파일 오류면 예외. */
+    P2PSettings loadSettings() throws Exception;
+
+    /** 서버 스레드. {@link #settings()}가 이 값을 돌려주게 바꾼다. */
+    void applySettings(P2PSettings settings);
+
     /** 서버에서 밴된 플레이어 UUID — 공개 방 announce에 해시로 실린다. 스냅샷을 돌려준다. */
     Collection<UUID> bannedPlayers();
 

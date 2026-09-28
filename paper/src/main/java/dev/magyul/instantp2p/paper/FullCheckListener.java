@@ -39,9 +39,16 @@ final class FullCheckListener {
         }
     }
 
+    /** Paper는 정원 검사를 로그인·설정 단계에서 두 번 한다 — 같은 입장에 로그를 두 번 남기지 않게 */
+    private static final java.util.Map<UUID, Long> LOGGED = new java.util.concurrent.ConcurrentHashMap<>();
+
     private static boolean bypass(P2PCore core, UUID id, String name) {
         if (!core.canBypassPlayerLimit(id)) return false;
-        PaperEntry.LOGGER.info("[host] 정원 초과 입장 허용: {} (개발자·서포터)", name);
+        long now = System.currentTimeMillis();
+        LOGGED.values().removeIf(t -> now - t > 30_000);
+        if (LOGGED.putIfAbsent(id, now) == null) {
+            PaperEntry.LOGGER.info("[host] 정원 초과 입장 허용: {} (개발자·서포터)", name);
+        }
         return true;
     }
 

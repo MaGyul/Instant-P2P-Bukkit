@@ -16,6 +16,7 @@ import java.util.Locale;
  *   /p2p close      방 닫기
  *   /p2p code       초대 코드 보기
  *   /p2p newcode    초대 코드 새로 만들기
+ *   /p2p reload     설정 파일 다시 읽기
  * </pre>
  * 권한: {@value #PERMISSION} (Fabric은 op).
  */
@@ -23,7 +24,7 @@ public final class P2PCommand {
 
     public static final String NAME = "p2p";
     public static final String PERMISSION = "instantp2p.admin";
-    public static final List<String> SUBCOMMANDS = List.of("status", "login", "logout", "open", "close", "code", "newcode");
+    public static final List<String> SUBCOMMANDS = List.of("status", "login", "logout", "open", "close", "code", "newcode", "reload");
 
     private static final String K = "instant-p2p-server.";
 
@@ -45,6 +46,7 @@ public final class P2PCommand {
                 else sender.send(K + "code.none");
             }
             case "newcode" -> host.newCode(sender);
+            case "reload" -> host.reload(sender);
             default -> sender.send(K + "usage");
         }
     }

@@ -155,7 +155,7 @@
   "instant-p2p.msg.signaling_unreachable": "§cServer maintenance §f(signaling failed) §c- retrying; players may not connect until it recovers",
   "instant-p2p.msg.signaling_recovered": "§aReconnected to the signaling server",
   "instant-p2p.msg.ip_restore_unavailable": "§c[instant-p2p] Player IP restoration is not supported on this server version and has been disabled. Connections still work. Please report this to the developer with your server type and version.",
-  "instant-p2p-server.usage": "§e/p2p <status|login|logout|open|close|code|newcode>",
+  "instant-p2p-server.usage": "§e/p2p <status|login|logout|open|close|code|newcode|reload>",
   "instant-p2p-server.status.account": "§7Account: §f%s",
   "instant-p2p-server.status.pending": "§7Account: §ewaiting for login §7(/p2p login to see the code again)",
   "instant-p2p-server.status.logged_out": "§7Account: §cnot logged in §7(/p2p login)",
@@ -183,5 +183,9 @@
   "instant-p2p-server.code.none": "§7No invite code yet §7(/p2p open)",
   "instant-p2p-server.newcode.done": "§aNew invite code: §f%s",
   "instant-p2p-server.copy": "§a[Click to copy]",
-  "instant-p2p-server.copy.hover": "Click to copy to the clipboard (not shown on screen)"
+  "instant-p2p-server.copy.hover": "Click to copy to the clipboard (not shown on screen)",
+  "instant-p2p-server.reload.done": "§aConfig reloaded",
+  "instant-p2p-server.reload.failed": "§cCould not reload the config: %s §7(keeping the previous settings)",
+  "instant-p2p-server.reload.udp_port": "§eThe UDP port change applies after reopening the room §7(/p2p close → /p2p open)",
+  "instant-p2p-server.reload.uuid_kept": "§eChanging serverUuid needs a server restart — keeping the previous value for now"
 }

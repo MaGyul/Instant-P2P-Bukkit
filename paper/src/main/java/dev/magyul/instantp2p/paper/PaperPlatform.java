@@ -20,7 +20,7 @@ import static dev.magyul.instantp2p.paper.PaperEntry.LOGGER;
 final class PaperPlatform implements P2PPlatform {
 
     private final JavaPlugin plugin;
-    private final P2PSettings settings;
+    private volatile P2PSettings settings;
     private final ServerText text;
     private final String minecraftVersion;
 
@@ -34,6 +34,16 @@ final class PaperPlatform implements P2PPlatform {
     @Override
     public P2PSettings settings() {
         return settings;
+    }
+
+    @Override
+    public P2PSettings loadSettings() throws Exception {
+        return PaperSettings.load(plugin);
+    }
+
+    @Override
+    public void applySettings(P2PSettings settings) {
+        this.settings = settings;
     }
 
     @Override

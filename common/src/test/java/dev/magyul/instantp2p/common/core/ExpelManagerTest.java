@@ -186,6 +186,8 @@ class ExpelManagerTest {
             return new P2PSettings(true, HOST, "1.2.3", "", "Server", true, List.of("normal"),
                     false, allowBroadcast, false, 0);
         }
+        @Override public P2PSettings loadSettings() { return settings(); }
+        @Override public void applySettings(P2PSettings settings) {}
         @Override public Collection<UUID> bannedPlayers() { return List.of(); }
         @Override public int maxPlayers() { return 20; }
         @Override public String minecraftVersion() { return "1.21.11"; }

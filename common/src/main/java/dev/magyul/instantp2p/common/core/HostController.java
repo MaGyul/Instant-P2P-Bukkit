@@ -154,6 +154,45 @@ public final class HostController {
         });
     }
 
+    /**
+     * 서버 스레드. 설정 파일을 다시 읽어 적용한다({@code /p2p reload}). 대부분은 바로 반영된다 —
+     * 공개 방 정보는 다시 올리고, 방송 허용은 room_state를 다시 보내고, relayOnly는 다음 입장자부터 적용된다.
+     * UDP 포트는 방을 다시 열어야 하고(자동으로 다시 열면 접속자가 끊긴다), serverUuid는 로그인 정보 암호화에
+     * 묶여 있어 재시작 전까지 이전 값을 쓴다.
+     */
+    public void reload(P2PSender sender) {
+        P2PSettings old = core.settings();
+        P2PSettings fresh;
+        try {
+            fresh = core.platform().loadSettings();
+        } catch (Exception e) {
+            String why = String.valueOf(e.getMessage());
+            LOG.warn("설정을 다시 불러오지 못했습니다 (파일은 그대로, 이전 설정 유지): {}", why);
+            // 파서 메시지는 여러 줄(위치·원문)이라 채팅에는 첫 줄만
+            int nl = why.indexOf('\n');
+            sender.send(K + "reload.failed", nl > 0 ? why.substring(0, nl).trim() : why);
+            return;
+        }
+        if (!fresh.serverUuid().equals(old.serverUuid())) {
+            sender.send(K + "reload.uuid_kept");
+            fresh = fresh.withServerUuid(old.serverUuid());
+        }
+        core.platform().applySettings(fresh);
+        LOG.info("설정을 다시 불러왔습니다");
+        sender.send(K + "reload.done");
+
+        if (state == RoomState.CLOSED) return;
+        if (fresh.udpPort() != old.udpPort()) sender.send(K + "reload.udp_port");
+        if (fresh.allowBroadcast() != old.allowBroadcast()) core.broadcastRoomState();
+        if (fresh.publicRoomDiffers(old)) {
+            // 채널·모드 버전이 바뀌면 로비 자체가 달라진다 — 내렸다가 다시 올린다
+            executor.execute(() -> {
+                core.bridge().unpublishPublicRoom();
+                core.platform().runSync(this::publishPublicRoom);
+            });
+        }
+    }
+
     /** 공개 방 정보를 (다시) 올린다 — Velocity가 백엔드 버전을 알아낸 뒤에도 부른다. */
     public void publishPublicRoom() {
         P2PSettings settings = core.settings();

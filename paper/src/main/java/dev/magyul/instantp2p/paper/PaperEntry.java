@@ -33,6 +33,10 @@ public final class PaperEntry extends JavaPlugin {
             saveDefaultConfig();
             LOGGER.info("컨피그를 불러오는 중...");
             settings = PaperSettings.load(this);
+        } catch (org.bukkit.configuration.InvalidConfigurationException e) {
+            // 파일은 건드리지 않는다 (PaperSettings 주석) — 고친 뒤 재시작하면 된다
+            LOGGER.error("config.yml 문법 오류로 플러그인을 끕니다 (파일은 그대로 둡니다): {}", e.getMessage());
+            Bukkit.getPluginManager().disablePlugin(this);
         } catch (Exception e) {
             LOGGER.error("컨피그를 불러오는데 실패 했습니다! 컨피그 파일이 존재 하는지, 파일에 문제가 없나요?", e);
             Bukkit.getPluginManager().disablePlugin(this);

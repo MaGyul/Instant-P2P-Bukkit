@@ -34,6 +34,19 @@ public record P2PSettings(
         if (udpPort < 0 || udpPort > 65535) udpPort = 0;
     }
 
+    /** serverUuid만 바꾼 사본 — 리로드 때 이전 값을 유지하려고 쓴다 */
+    public P2PSettings withServerUuid(UUID uuid) {
+        return new P2PSettings(enabled, uuid, targetModVersion, title, name, publicRoom, channels, channelAnd,
+                allowBroadcast, relayOnly, udpPort);
+    }
+
+    /** 공개 방 announce에 들어가는 값이 달라졌는지 */
+    public boolean publicRoomDiffers(P2PSettings o) {
+        return publicRoom != o.publicRoom || channelAnd != o.channelAnd || allowBroadcast != o.allowBroadcast
+                || !title.equals(o.title) || !name.equals(o.name) || !channels.equals(o.channels)
+                || !targetModVersion.equals(o.targetModVersion);
+    }
+
     /** 쉼표로 이은 채널 문자열 */
     public String channel() {
         return String.join(",", channels);

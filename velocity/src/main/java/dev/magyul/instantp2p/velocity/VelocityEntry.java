@@ -35,8 +35,8 @@ import java.util.concurrent.TimeUnit;
         authors = {"MaGyul"})
 public final class VelocityEntry {
 
-    private static final String CONFIG_FILE = "config.json";
-    private static final String MOD_VERSION_KEY = "minecraftVersion";
+    static final String CONFIG_FILE = "config.json";
+    static final String MOD_VERSION_KEY = "minecraftVersion";
     private static final long VERSION_RETRY_SECONDS = 30;
 
     private final ProxyServer server;

@@ -155,7 +155,7 @@
   "instant-p2p.msg.signaling_unreachable": "§c서버 점검 중입니다 §f(시그널링 연결 실패) §c— 재시도 중, 복구까지 접속이 안 될 수 있습니다",
   "instant-p2p.msg.signaling_recovered": "§a시그널링 서버에 다시 연결되었습니다",
   "instant-p2p.msg.ip_restore_unavailable": "§c[instant-p2p] 이 서버 버전에서는 접속자 IP 복원을 할 수 없어 꺼졌습니다. 접속은 정상입니다. 서버 종류·버전과 함께 개발자에게 문의해 주세요.",
-  "instant-p2p-server.usage": "§e/p2p <status|login|logout|open|close|code|newcode>",
+  "instant-p2p-server.usage": "§e/p2p <status|login|logout|open|close|code|newcode|reload>",
   "instant-p2p-server.status.account": "§7계정: §f%s",
   "instant-p2p-server.status.pending": "§7계정: §e로그인 대기 중 §7(/p2p login 으로 코드 다시 보기)",
   "instant-p2p-server.status.logged_out": "§7계정: §c로그인 안 됨 §7(/p2p login)",
@@ -183,5 +183,9 @@
   "instant-p2p-server.code.none": "§7아직 초대 코드가 없습니다 §7(/p2p open)",
   "instant-p2p-server.newcode.done": "§a초대 코드를 새로 만들었습니다: §f%s",
   "instant-p2p-server.copy": "§a[클릭해서 복사]",
-  "instant-p2p-server.copy.hover": "클릭하면 클립보드에 복사됩니다 (화면에는 표시하지 않습니다)"
+  "instant-p2p-server.copy.hover": "클릭하면 클립보드에 복사됩니다 (화면에는 표시하지 않습니다)",
+  "instant-p2p-server.reload.done": "§a설정을 다시 불러왔습니다",
+  "instant-p2p-server.reload.failed": "§c설정을 불러오지 못했습니다: %s §7(이전 설정을 그대로 씁니다)",
+  "instant-p2p-server.reload.udp_port": "§eUDP 포트 변경은 방을 다시 열어야 적용됩니다 §7(/p2p close → /p2p open)",
+  "instant-p2p-server.reload.uuid_kept": "§eserverUuid 변경은 서버를 재시작해야 적용됩니다 — 지금은 이전 값을 씁니다"
 }

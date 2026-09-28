@@ -23,7 +23,7 @@ final class FabricPlatform implements P2PPlatform {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("Instant-P2P");
 
-    private final P2PSettings settings;
+    private volatile P2PSettings settings;
     private final Path dataFolder;
     private final String minecraftVersion;
     private final ServerListFiles ops;
@@ -45,6 +45,16 @@ final class FabricPlatform implements P2PPlatform {
     @Override
     public P2PSettings settings() {
         return settings;
+    }
+
+    @Override
+    public P2PSettings loadSettings() throws Exception {
+        return dev.magyul.instantp2p.common.core.JsonSettings.load(dataFolder.resolve("config.json"));
+    }
+
+    @Override
+    public void applySettings(P2PSettings settings) {
+        this.settings = settings;
     }
 
     @Override

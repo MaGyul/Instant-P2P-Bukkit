@@ -8,12 +8,12 @@ description: instant-p2p 모드 클라이언트가 초대 코드/공개 방 목�
 commands:
   p2p:
     description: instant-p2p 방 관리 (로그인, 열기/닫기, 초대 코드)
-    usage: /p2p <status|login|logout|open|close|code|newcode>
+    usage: /p2p <status|login|logout|open|close|code|newcode|reload>
     permission: instantp2p.admin
 
 permissions:
   instantp2p.admin:
-    description: /p2p 명령어 (로그인, 방 열기/닫기, 초대 코드 보기·재생성)
+    description: /p2p 명령어 (로그인, 방 열기/닫기, 초대 코드 보기·재생성, 설정 다시 읽기)
     default: op
   instantp2p.host:
     description: 방장으로 취급 (expel/kick 최상위 권한, 추방·강퇴 대상 아님)

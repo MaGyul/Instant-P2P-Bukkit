@@ -31,7 +31,7 @@ final class VelocityPlatform implements P2PPlatform {
 
     private final Object plugin;
     private final ProxyServer server;
-    private final P2PSettings settings;
+    private volatile P2PSettings settings;
     private final Path dataFolder;
     /** room_update.version — 설정값이나 백엔드 ping으로 정해진다 (BackendVersion 참고) */
     private volatile String minecraftVersion;
@@ -50,6 +50,27 @@ final class VelocityPlatform implements P2PPlatform {
     @Override
     public P2PSettings settings() {
         return settings;
+    }
+
+    @Override
+    public P2PSettings loadSettings() throws Exception {
+        Path file = dataFolder.resolve(VelocityEntry.CONFIG_FILE);
+        P2PSettings loaded = dev.magyul.instantp2p.common.core.JsonSettings.load(file);
+        // minecraftVersion을 직접 적었으면 그 값으로 (비웠으면 백엔드 ping으로 알아낸 값을 그대로 둔다)
+        String version = dev.magyul.instantp2p.common.core.JsonSettings.extraString(file, VelocityEntry.MOD_VERSION_KEY, "");
+        if (!version.isBlank()) pendingVersion = version.trim();
+        return loaded;
+    }
+
+    /** loadSettings에서 읽은 minecraftVersion — applySettings 때 반영한다 */
+    private volatile String pendingVersion;
+
+    @Override
+    public void applySettings(P2PSettings settings) {
+        this.settings = settings;
+        String v = pendingVersion;
+        pendingVersion = null;
+        if (v != null) minecraftVersion = v;
     }
 
     @Override

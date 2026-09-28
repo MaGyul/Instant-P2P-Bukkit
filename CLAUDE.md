@@ -48,6 +48,8 @@ kwik(+agent15, hkdf, siphash)은 `implementation` — 각 플랫폼 shadow jar�
 `PaperEntry`, `PaperPlatform`, `PaperSettings`(`config.yml`), `InstantP2pListener`, `P2PNet`(채널 등록),
 `ServerText`(Paper는 `AdventureText`, Spigot은 `LegacyText` — Adventure 참조는 `AdventureText`에만).
 MC 버전은 `Bukkit.getBukkitVersion()`(`getMinecraftVersion()`은 Paper 전용). 1.21 미만이면 비활성화.
+**`getConfig()/reloadConfig()/saveConfig()` 금지** — 문법 오류면 예외 없이 빈 설정을 돌려줘서, serverUuid를 새로 만들어 저장하는 순간
+사용자 파일이 기본값으로 덮인다(실제로 겪음). `PaperSettings`가 `YamlConfiguration.load`로 직접 파싱하고, 오류면 예외·파일 무변경.
 
 ### Fabric — `fabric-base`, `fabric-shared`, `fabric-1_21`, `fabric-26`
 - `fabric-base` — MC를 참조하지 않는 부분: `FabricEntry`(진입점), `ServerListFiles`. 설정은 `config/instant-p2p-server/config.json`(`JsonSettings`).
@@ -99,8 +101,11 @@ v1_21=intermediary·v26=Mojang 이름을 검사한다.
 - 지원 범위는 MC 1.21 이상(원본 모드 최소 버전). MC 버전 문자열은 런타임에 얻는다.
 
 - `enabled`: **서버 시작 시 자동으로 열기**(기본 false). 꺼져 있어도 플러그인은 켜지고 `/p2p open`으로 연다. 로그인 전이면 안내만.
-- `/p2p status|login|logout|open|close|code|newcode` — 권한 `instantp2p.admin`(Fabric은 op/콘솔). 플레이어에게는 초대·로그인 코드를
+- `/p2p status|login|logout|open|close|code|newcode|reload` — 권한 `instantp2p.admin`(Fabric은 op/콘솔). 플레이어에게는 초대·로그인 코드를
   숨기고 클릭 복사 버튼으로 보낸다(방송 대비, 로그인 코드도 먼저 입력한 사람 계정이 로그인되므로 가린다). 콘솔은 평문.
+- `reload`: `P2PPlatform.loadSettings/applySettings`, 반영은 `HostController.reload` — 공개 방 값이 바뀌면 내렸다 다시 올리고,
+  allowBroadcast면 room_state 재전송, relayOnly는 조인자마다 읽으므로 자동. `udpPort`는 안내만(자동 재오픈은 접속자를 끊음),
+  `serverUuid`는 로그인 정보 AAD에 묶여 재시작 전까지 이전 값 유지.
 - 로그인 정보: `account.dat`(AES-256-GCM, AAD=serverUuid), 키는 서버 폴더 밖 `~/.instant-p2p/keys/<serverUuid>.key`
   (홈에 못 쓰면 데이터 폴더 `.account.key` + 경고). 갱신 토큰은 쓸 때마다 새 값으로 저장, `invalid_grant`면 지운다. 토큰 값은 로그 금지.
   앱 ID는 마인월드 런처(`MicrosoftAuth.CLIENT_ID`, `-Dinstantp2p.auth.clientId`로 변경) — Minecraft API 승인 + 공용 클라이언트 흐름 허용.
