@@ -159,7 +159,7 @@ class ExpelManagerTest {
 
         @Override public P2PSettings settings() {
             return new P2PSettings(true, HOST, "1.2.3", "", "Server", true, List.of("normal"),
-                    false, allowBroadcast, false);
+                    false, allowBroadcast, false, 0);
         }
         @Override public Collection<UUID> bannedPlayers() { return List.of(); }
         @Override public int maxPlayers() { return 20; }

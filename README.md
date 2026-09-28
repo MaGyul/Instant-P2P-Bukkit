@@ -16,8 +16,12 @@ jar 하나(`instant-p2p-<버전>.jar`)를 서버에 넣으면 됩니다. 각 로
 | Velocity 3.x / 4.x | `plugins/` | `plugins/instant-p2p-proxy/config.json` | 백엔드에는 필요 없음, modern forwarding 권장 |
 | Fabric 1.21+ / 26.x (전용 서버) | `mods/` | `config/instant-p2p-server/config.json` | Fabric API 필요 |
 
-설정 키: `enabled`, `serverUuid`(자동 생성), `targetModVersion`, `title`, `name`, `publicRoom`, `channels`, `channelAnd`, `allowBroadcast`, `relayOnly`.
+설정 키: `enabled`, `serverUuid`(자동 생성), `targetModVersion`, `title`, `name`, `publicRoom`, `channels`, `channelAnd`, `allowBroadcast`, `relayOnly`, `udpPort`.
 Velocity만 `minecraftVersion`(비우면 첫 백엔드에 ping해서 정함)이 더 있습니다.
+
+- `targetModVersion`: 기본 `auto`. 공개 방을 올릴 때 시그널링 서버가 알려주는 최신 배포 버전을 씁니다. 특정 버전 클라이언트에게만 보이게 하려면 `"1.3"`처럼 적습니다.
+- `udpPort`: QUIC이 쓸 UDP 포트. 기본 `0`은 실행할 때마다 임의 포트입니다. 방화벽이 있는 서버라면 포트를 정해 UDP로 열어 두면 중계 없이 직결되는 경우가 늘어납니다.
+  다른 UDP 용도(`enable-query`의 25565, Simple Voice Chat 24454, Geyser 19132)와 겹치지 않게 하세요. 이미 쓰이는 포트면 경고를 남기고 임의 포트로 엽니다.
 
 ## 확인한 환경
 
@@ -102,7 +106,7 @@ QUIC 연결의 실제 UDP 출발 주소를 씁니다.
 
 ## 원본 모드와의 호환성 주의
 
-- **공개 방 로비 ID**에 모드 버전 문자열의 해시가 들어갑니다. `targetModVersion`이 클라이언트 모드 버전과 같아야 목록에 보입니다(현재 1.3).
+- **공개 방 로비 ID**에 모드 버전 문자열의 해시가 들어갑니다. `targetModVersion`이 클라이언트 모드 버전과 같아야 목록에 보입니다(`auto`면 최신 배포 버전, 조회 실패 시 1.3).
 - `room_update`의 `version`은 서버 MC 버전입니다. 클라이언트는 자기 버전과 문자열 비교합니다.
 - 시그널링의 `spd` 키, 피어 이름 규칙, members 해시(`base64url(sha256(code + ":" + uuid)[0:8])`)는 원본과 한 글자라도 다르면 연결되지 않습니다.
 - 모드 1.2.x(WebRTC)와는 연결되지 않습니다. 1.3부터 전송이 QUIC으로 바뀌었고 피어 이름도 일부 달라졌습니다.
@@ -110,7 +114,7 @@ QUIC 연결의 실제 UDP 출발 주소를 씁니다.
 ## 알려진 제한
 
 - **공개 방 등록 인증:** 모드 1.3은 공개 방 등록 때 Mojang 계정 인증 토큰을 붙입니다. 시그널링 서버가 인증을 켜면 계정 세션이 없는 전용 서버는 공개 방을 올릴 수 없습니다. 지금은 시그널링 서버에서 꺼져 있습니다. 서버용 방법은 원본 개발자와 논의가 필요합니다.
-- **UDP:** QUIC 소켓은 실행할 때마다 임의 포트를 씁니다. 홀펀칭이 안 되는 네트워크라도 TURN 경로로는 붙습니다.
+- **UDP:** 홀펀칭이 안 되는 네트워크라도 TURN 경로로는 붙습니다. `udpPort`를 정해 열어 두면 직결 비율이 올라갑니다.
 - 모드 UI의 추방·강퇴는 roles.json에 역할이 있는 계정만 요청을 보냅니다(원본 클라이언트 동작). 서버 op나 호스트 권한자는 모드 UI 대신 서버 명령어를 써야 합니다.
 - 시그널링에 인증이 없어 초대 코드가 사실상 유일한 비밀입니다. 화이트리스트나 밴으로 관리해야 합니다.
 

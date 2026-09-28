@@ -45,10 +45,11 @@ final class QuicIce {
    private static final boolean SRFLX_ONLY = Boolean.getBoolean("kfcudp.quic.srflxonly");
    private final boolean relayOnly;
 
-   QuicIce(String stunUrl, boolean relayOnly) throws SocketException {
+   /** @param port 바인드할 UDP 포트, 0이면 임의 포트. 이미 쓰이는 포트면 SocketException. */
+   QuicIce(String stunUrl, boolean relayOnly, int port) throws SocketException {
       this.stunUrl = stunUrl;
       this.relayOnly = relayOnly;
-      this.socket = new IceSocket(this);
+      this.socket = new IceSocket(this, port);
    }
 
    void enableTurn(String turnUrl, String user, String pass) {
@@ -609,8 +610,8 @@ final class QuicIce {
          return c != null ? c : -1;
       }
 
-      IceSocket(QuicIce ice) throws SocketException {
-         super(new InetSocketAddress(0));
+      IceSocket(QuicIce ice, int port) throws SocketException {
+         super(new InetSocketAddress(port));
          this.ice = ice;
       }
 

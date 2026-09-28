@@ -7,11 +7,13 @@ title: ""
 # 공개 여부
 publicRoom: true
 
-# 타겟을 할 모드 버전
-targetModVersion: "1.3"
+# 공개 방 목록에 올릴 모드 버전 ("auto"면 시그널링 서버가 알려주는 최신 배포 버전)
+targetModVersion: "auto"
 
 # P2P 설정
 relayOnly: false
+# QUIC이 쓸 UDP 포트 (0이면 매번 임의 포트, 방화벽에서 열어 두면 직결이 잘 됩니다)
+udpPort: 0
 allowBroadcast: false
 
 channels:

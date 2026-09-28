@@ -24,6 +24,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Inet4Address;
 import java.net.InetSocketAddress;
+import java.net.SocketException;
 import java.net.Socket;
 import java.util.List;
 import java.util.Map;
@@ -109,7 +110,7 @@ public final class QuicHost {
         QuicCert.Identity id = QuicCert.generate();
         fingerprint = id.fingerprint();
 
-        QuicIce agent = new QuicIce(P2PConfig.STUN_URL, relayOnly());
+        QuicIce agent = openIce(core.settings().udpPort());
         ice = agent;
         agent.enableTurn(P2PConfig.TURN_URL, P2PConfig.TURN_USERNAME, P2PConfig.TURN_CREDENTIAL);
         candidates = agent.gather();
@@ -143,6 +144,18 @@ public final class QuicHost {
         if (agent != null) agent.close();
         worker.shutdownNow();
         LOG.info("[quic-host] stopped room={} ({}ms)", roomId, System.currentTimeMillis() - t0);
+    }
+
+    /** 설정한 UDP 포트가 이미 쓰이고 있으면 임의 포트로 연다 (접속은 되게, 관리자는 로그로 안다). */
+    private QuicIce openIce(int port) throws SocketException {
+        if (port != 0) {
+            try {
+                return new QuicIce(P2PConfig.STUN_URL, relayOnly(), port);
+            } catch (SocketException e) {
+                LOG.warn("[quic-host] UDP {} 포트를 열 수 없다({}) — 임의 포트로 연다", port, e.getMessage());
+            }
+        }
+        return new QuicIce(P2PConfig.STUN_URL, relayOnly(), 0);
     }
 
     private static void preload(Class<?>... classes) {

@@ -128,6 +128,7 @@ public final class PublicRoomAnnouncer {
         running = false;
         generation.incrementAndGet();
         LOG.info("[public-room] un-announcing");
+        ModVersion.reset();
         List<WebSocketClient> old = ws;
         ws = List.of();
         connectedChannels = List.of();
@@ -177,9 +178,11 @@ public final class PublicRoomAnnouncer {
         connectedChannels = channels;
 
         int shard = P2PConfig.publicRoomShardFor(roomCode);
+        String modVersion = ModVersion.resolve(platform.settings().targetModVersion());
+        if (!isCurrent(gen)) return;
         List<WebSocketClient> clients = new ArrayList<>();
         for (String channel : channels) {
-            clients.add(newClient(gen, P2PConfig.publicRoomsLobbyId(channel, shard, platform.settings().targetModVersion())));
+            clients.add(newClient(gen, P2PConfig.publicRoomsLobbyId(channel, shard, modVersion)));
         }
         ws = List.copyOf(clients);
         for (WebSocketClient client : clients) {

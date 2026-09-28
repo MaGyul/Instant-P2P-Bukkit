@@ -10,7 +10,9 @@ import java.util.UUID;
  * 실행 중에 바뀌지 않는다 — 설정을 다시 읽으려면 새로 만든다.
  *
  * @param channels         채널 목록 (원본 규칙으로 정규화된다)
- * @param targetModVersion 공개 방 로비 ID에 해시로 들어간다. 클라이언트 모드 버전과 같아야 목록에 보인다.
+ * @param targetModVersion 공개 방 로비 ID에 해시로 들어간다. 클라이언트 모드 버전과 같아야 목록에 보인다. {@code auto}면 시그널링 서버 값
+ *                         ({@link dev.magyul.instantp2p.common.signaling.ModVersion}).
+ * @param udpPort          QUIC이 쓸 UDP 포트. 0이면 실행할 때마다 임의 포트(방화벽에서 열어 두면 직결이 잘 된다).
  */
 public record P2PSettings(
         boolean enabled,
@@ -22,12 +24,14 @@ public record P2PSettings(
         List<String> channels,
         boolean channelAnd,
         boolean allowBroadcast,
-        boolean relayOnly
+        boolean relayOnly,
+        int udpPort
 ) {
 
     public P2PSettings {
         // 원본이 채널 입력을 다듬는 규칙과 같게 (공백 제거, 대소문자 무시 중복 제거, 최대 5개·24자, 비면 normal)
         channels = P2PConfig.parseChannels(String.join(",", channels));
+        if (udpPort < 0 || udpPort > 65535) udpPort = 0;
     }
 
     /** 쉼표로 이은 채널 문자열 */
