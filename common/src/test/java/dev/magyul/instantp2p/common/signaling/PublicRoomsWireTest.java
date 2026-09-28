@@ -66,23 +66,23 @@ class PublicRoomsWireTest {
 
     private static P2PSettings settings(boolean allowBroadcast) {
         return new P2PSettings(true, java.util.UUID.randomUUID(), "1.2.3", "", "Server", true,
-                List.of("normal", "pvp"), false, allowBroadcast, false, 0);
+                List.of("normal", "pvp"), false, allowBroadcast, 0);
     }
 
     @Test
     void settingsClampUdpPort() {
         assertEquals(0, new P2PSettings(true, java.util.UUID.randomUUID(), "1.3", "", "Server", true,
-                List.of(), false, false, false, 70000).udpPort());
+                List.of(), false, false, 70000).udpPort());
         assertEquals(24460, new P2PSettings(true, java.util.UUID.randomUUID(), "1.3", "", "Server", true,
-                List.of(), false, false, false, 24460).udpPort());
+                List.of(), false, false, 24460).udpPort());
     }
 
     @Test
     void settingsNormalizeChannelsLikeOriginal() {
         P2PSettings s = new P2PSettings(true, java.util.UUID.randomUUID(), "1.3", "", "Server", true,
-                List.of(" PvP ", "", "pvp"), false, false, false, 0); // 빈 칸은 normal, pvp는 중복
+                List.of(" PvP ", "", "pvp"), false, false, 0); // 빈 칸은 normal, pvp는 중복
         assertEquals(List.of("PvP", "normal"), s.channels());
         assertEquals(List.of("normal"), new P2PSettings(true, java.util.UUID.randomUUID(), "1.3", "", "Server", true,
-                List.of(), false, false, false, 0).channels());
+                List.of(), false, false, 0).channels());
     }
 }

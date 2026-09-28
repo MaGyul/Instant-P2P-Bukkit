@@ -35,7 +35,6 @@ final class PaperSettings {
                 config.getStringList("channels"),
                 config.getBoolean("channelAnd", false),
                 config.getBoolean("allowBroadcast", false),
-                config.getBoolean("relayOnly", false),
                 config.getInt("udpPort", 0));
     }
 

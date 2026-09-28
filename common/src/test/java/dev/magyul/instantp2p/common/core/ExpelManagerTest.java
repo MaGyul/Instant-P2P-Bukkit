@@ -184,7 +184,7 @@ class ExpelManagerTest {
 
         @Override public P2PSettings settings() {
             return new P2PSettings(true, HOST, "1.2.3", "", "Server", true, List.of("normal"),
-                    false, allowBroadcast, false, 0);
+                    false, allowBroadcast, 0);
         }
         @Override public P2PSettings loadSettings() { return settings(); }
         @Override public void applySettings(P2PSettings settings) {}

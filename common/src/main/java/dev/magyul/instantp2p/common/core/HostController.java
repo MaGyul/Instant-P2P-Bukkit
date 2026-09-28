@@ -156,7 +156,7 @@ public final class HostController {
 
     /**
      * 서버 스레드. 설정 파일을 다시 읽어 적용한다({@code /p2p reload}). 대부분은 바로 반영된다 —
-     * 공개 방 정보는 다시 올리고, 방송 허용은 room_state를 다시 보내고, relayOnly는 다음 입장자부터 적용된다.
+     * 공개 방 정보는 다시 올리고, 방송 허용은 room_state를 다시 보낸다.
      * UDP 포트는 방을 다시 열어야 하고(자동으로 다시 열면 접속자가 끊긴다), serverUuid는 로그인 정보 암호화에
      * 묶여 있어 재시작 전까지 이전 값을 쓴다.
      */

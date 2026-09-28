@@ -41,7 +41,8 @@ public final class JsonSettings {
         String title = string(json, "title", "");
         boolean publicRoom = bool(json, "publicRoom", true);
         String targetModVersion = string(json, "targetModVersion", "auto");
-        boolean relayOnly = bool(json, "relayOnly", false);
+        // 서버 쪽 중계 강제(relayOnly)는 원본 개발자 요청으로 없앴다 — 예전 설정 파일에 남은 키는 지운다
+        json.remove("relayOnly");
         int udpPort = integer(json, "udpPort", 0);
         boolean allowBroadcast = bool(json, "allowBroadcast", false);
         List<String> channels = strings(json, "channels", List.of("normal"));
@@ -60,7 +61,7 @@ public final class JsonSettings {
         }
 
         return new P2PSettings(enabled, UUID.fromString(serverUuid), targetModVersion, title, name, publicRoom,
-                channels, channelAnd, allowBroadcast, relayOnly, udpPort);
+                channels, channelAnd, allowBroadcast, udpPort);
     }
 
     /** 플랫폼 전용 문자열 키 (예: Velocity의 minecraftVersion). 없으면 기본값을 채워 저장한다. */

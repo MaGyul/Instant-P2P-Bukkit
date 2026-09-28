@@ -115,11 +115,6 @@ public final class QuicHost {
         this.targetPort = Integer.parseInt(target.substring(colon + 1));
     }
 
-    /** 「중계 통신 강제」 — 조인자를 맞이할 때마다 읽는다(원본 relayOnlyNow). */
-    private boolean relayOnly() {
-        return core.settings().relayOnly();
-    }
-
     // ── 라이프사이클 ──────────────────────────────────────────────────────────
 
     public void start() throws Exception {
@@ -131,7 +126,7 @@ public final class QuicHost {
         QuicCert.Identity id = QuicCert.generate();
         fingerprint = id.fingerprint();
 
-        // 소켓 전체를 막는 relayOnly는 끈다 — 중계 여부는 조인자마다 그 순간 설정으로 정한다(원본과 같음)
+        // 서버판은 방장 쪽 중계 강제가 없다(원본 개발자 요청 — 중계 서버 부담). 중계는 직결이 안 될 때와 조인자가 강제할 때만 쓴다.
         QuicIce agent = openIce(core.settings().udpPort());
         ice = agent;
         // TURN 계정은 방장 계정 인증으로 받는다. 못 받으면 중계 없이(직결만) 간다.
@@ -340,16 +335,15 @@ public final class QuicHost {
      * 지문·후보를 보내고 홀을 뚫는다. {@code theirs}는 이 조인자의 후보만 모인 목록이다 — 소켓과 ICE는
      * 조인자 전원이 공유하므로 뚫을 때는 반드시 자기 후보로만 판정해야 한다.
      * <p>
-     * 방장이 중계 강제(relayNow)면 내 트래픽이 내 allocation을 거친다. 조인자가 중계 강제면 내 host 후보만 알리지 않는다
-     * (둘을 묶어 방장까지 중계로 밀면 relay→relay 2홉이 되어 느려진다 — 원본 실측).
+     * 조인자가 중계 강제면 내 host 후보만 알리지 않는다(사설 IP는 상대 allocation에서 닿지 않는다). 방장 쪽 중계 강제는
+     * 서버판에 없다(원본 개발자 요청) — 원본의 relayNow 자리는 항상 false.
      */
     private void negotiate(String sid, boolean clientRelayForced, List<QuicIce.Candidate> theirs) {
         QuicIce agent = ice;
         if (agent == null || !running.get()) return;
-        boolean relayNow = relayOnly();
-        List<QuicIce.Candidate> mine = QuicIce.advertised(candidates, relayNow, clientRelayForced);
+        List<QuicIce.Candidate> mine = QuicIce.advertised(candidates, false, clientRelayForced);
         if (mine.isEmpty()) {
-            LOG.warn("[host] 중계 통신 강제인데 중계 서버를 못 쓴다(중계 계정 없음) — sid={} 를 받을 수 없다", sid);
+            LOG.warn("[host] 조인자에게 알릴 후보가 없다(STUN·중계 모두 실패) — sid={} 를 받을 수 없다", sid);
             send(sid, VillasMsg.description(MSG_NO_RELAY, ""));
             return;
         }
@@ -359,7 +353,7 @@ public final class QuicHost {
                 send(sid, VillasMsg.candidate(c.line(), "0"));
             }
             // ownLoop=false — ServerConnector가 이미 수신 루프를 돌리고 있다
-            QuicIce.Candidate picked = agent.punch(theirs, PUNCH_MS, false, relayNow);
+            QuicIce.Candidate picked = agent.punch(theirs, PUNCH_MS, false, false);
             LOG.info("[host] punch done sid={} result={}", sid,
                     picked != null ? picked.type() : "none (조인자 쪽 경로로 붙을 수 있다)");
         } catch (Exception e) {

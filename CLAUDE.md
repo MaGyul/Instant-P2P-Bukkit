@@ -110,13 +110,13 @@ v1_21=intermediary·v26=Mojang 이름을 검사한다.
 - `/p2p status|login|logout|open|close|code|newcode|reload` — 권한 `instantp2p.admin`(Fabric은 op/콘솔). 플레이어에게는 초대·로그인 코드를
   숨기고 클릭 복사 버튼으로 보낸다(방송 대비, 로그인 코드도 먼저 입력한 사람 계정이 로그인되므로 가린다). 콘솔은 평문.
 - `reload`: `P2PPlatform.loadSettings/applySettings`, 반영은 `HostController.reload` — 공개 방 값이 바뀌면 내렸다 다시 올리고,
-  allowBroadcast면 room_state 재전송, relayOnly는 조인자마다 읽으므로 자동. `udpPort`는 안내만(자동 재오픈은 접속자를 끊음),
+  allowBroadcast면 room_state 재전송. `udpPort`는 안내만(자동 재오픈은 접속자를 끊음),
   `serverUuid`는 로그인 정보 AAD에 묶여 재시작 전까지 이전 값 유지.
 - 로그인 정보: `account.dat`(AES-256-GCM, AAD=serverUuid), 키는 서버 폴더 밖 `~/.instant-p2p/keys/<serverUuid>.key`
   (홈에 못 쓰면 데이터 폴더 `.account.key` + 경고). 갱신 토큰은 쓸 때마다 새 값으로 저장, `invalid_grant`면 지운다. 토큰 값은 로그 금지.
   앱 ID는 마인월드 런처(`MicrosoftAuth.CLIENT_ID`, `-Dinstantp2p.auth.clientId`로 변경) — Minecraft API 승인 + 공용 클라이언트 흐름 허용.
 
-설정 키: `enabled`, `serverUuid`, `targetModVersion`, `title`, `name`, `publicRoom`, `channels`, `channelAnd`, `allowBroadcast`, `relayOnly`, `udpPort`
+설정 키: `enabled`, `serverUuid`, `targetModVersion`, `title`, `name`, `publicRoom`, `channels`, `channelAnd`, `allowBroadcast`, `udpPort`
 (Velocity만 `minecraftVersion` 추가).
 - `targetModVersion`: 기본 `auto` — 공개 방 로비에 접속할 때 시그널링 `/api/v1/version`의 `current`를 받는다(`signaling/ModVersion`).
   성공값은 announce를 멈출 때까지 재사용, 실패하면 `1.3`으로 올리고 다음 재접속 때 다시 묻는다. 폴링하지 않는다(실행 중 새 버전이 나오면 재시작해야 반영).

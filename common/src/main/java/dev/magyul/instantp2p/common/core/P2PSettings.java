@@ -24,7 +24,6 @@ public record P2PSettings(
         List<String> channels,
         boolean channelAnd,
         boolean allowBroadcast,
-        boolean relayOnly,
         int udpPort
 ) {
 
@@ -37,7 +36,7 @@ public record P2PSettings(
     /** serverUuid만 바꾼 사본 — 리로드 때 이전 값을 유지하려고 쓴다 */
     public P2PSettings withServerUuid(UUID uuid) {
         return new P2PSettings(enabled, uuid, targetModVersion, title, name, publicRoom, channels, channelAnd,
-                allowBroadcast, relayOnly, udpPort);
+                allowBroadcast, udpPort);
     }
 
     /** 공개 방 announce에 들어가는 값이 달라졌는지 */
