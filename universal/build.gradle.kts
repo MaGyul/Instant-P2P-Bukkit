@@ -25,7 +25,7 @@ val universalJar by tasks.registering(Jar::class) {
     val paperFiles = paperJar.elements
     val velocityFiles = velocityJar.elements
     val fabricFiles = fabricJar.elements
-    archiveBaseName = "instant-p2p"
+    archiveBaseName = "instant-p2p-server"
     archiveClassifier = ""
     destinationDirectory = layout.buildDirectory.dir("libs")
 
