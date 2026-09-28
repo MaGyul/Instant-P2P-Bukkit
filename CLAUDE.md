@@ -175,6 +175,7 @@ v1_21=intermediary·v26=Mojang 이름을 검사한다.
 ### 서버 로직
 - expel은 영구 밴이 아니라 **차단자 기준**: holders에 기록, 차단자가 나가면 해제. 클라이언트가 접속 때마다 목록을 재전송하므로 **오프라인 대상도 기록**해야 한다.
 - 우선순위: 무등급 0, 방송인 1(readmit 외엔 `allowBroadcast` 필요), 서포터 2, 개발자 3, 호스트 4. `sender > target`일 때만 실행, 호스트는 expel/kick 대상 아님.
+  호스트 = serverUuid·op(Fabric)·`instantp2p.host`(Paper/Velocity, 기본 op) → **op 대상 요청은 거부되고 INFO 로그**(예전엔 조용히 무시돼 고장처럼 보였다).
 - 모드 클라이언트는 roles.json에 역할이 있는 계정만 moderation 패킷을 보낸다 — op/호스트 권한자는 모드 UI로 추방 못 함.
 - Roles는 **폴링 금지**(원본 개발자 요청). 호스트 시작 시 1회 + 로그인 시 쿨다운 60초, 비동기. 바뀌면 `room_state` 재전송.
 - 정원 초과 입장: 터널로 들어온 개발자·서포터만(`P2PCore.canBypassPlayerLimit`), 들어온 뒤엔 한 자리를 차지한다.

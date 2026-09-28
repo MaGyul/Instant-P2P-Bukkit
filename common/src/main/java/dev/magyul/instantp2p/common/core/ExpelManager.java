@@ -77,7 +77,11 @@ public final class ExpelManager {
         // 서로 추방하는 것도 막는다. 등급 0(무등급)은 상대가 몇 등급이든 항상 0<=priority(target)이라
         // 자동으로 걸러진다(따로 0 체크를 안 해도 됨). 방장은 등급과 무관하게 최상위다.
         int senderPriority = platform.isHost(sender) ? 4 : priority(sender);
-        if (senderPriority <= priority(target)) return;
+        if (senderPriority <= priority(target)) {
+            // 클라이언트가 접속할 때마다 차단 목록 전체를 다시 보내므로 debug로만 남긴다
+            LOGGER.debug("[expel] {}의 요청(action={}) 무시: 등급이 대상 {}보다 높지 않음", sender, action, target);
+            return;
+        }
         // 스트리머 등급(1)의 추방·강퇴 권한은 방송 허용 방에서만 유효 — 방송 중인 스트리머 보호가
         // 목적이다(원본 모드의 스트리머 보호 안내 참고). 해제는 막지 않는다 — 방송
         // 허용을 중간에 껐다고 이미 추방한 사람을 영영 못 풀게 되면 안 된다. 개발자·서포터는 무관하게 그대로.
@@ -98,7 +102,10 @@ public final class ExpelManager {
     private void expel(UUID expellerUuid, UUID targetUuid) {
         // 오프라인 대상도 기록한다 — 클라이언트가 접속 때마다 차단 목록을 다시 보낸다.
         boolean online = platform.isOnline(targetUuid);
-        if (online && platform.isHost(targetUuid)) return;
+        if (online && platform.isHost(targetUuid)) {
+            logHostTarget(expellerUuid, targetUuid);
+            return;
+        }
         boolean alreadyExpelled = isExpelled(targetUuid);
         holders.computeIfAbsent(targetUuid, k -> ConcurrentHashMap.newKeySet()).add(expellerUuid);
         if (alreadyExpelled || !online) return;
@@ -118,7 +125,11 @@ public final class ExpelManager {
     /** 추방과 달리 holders에 아무 것도 남기지 않는 1회성 강퇴 — 재입장은 막지 않는다
      * ("물갈이"·경고용). 호스트는 추방과 같은 이유로 대상에서 제외. */
     private void kick(UUID kickerUuid, UUID targetUuid) {
-        if (!platform.isOnline(targetUuid) || platform.isHost(targetUuid)) return;
+        if (!platform.isOnline(targetUuid)) return;
+        if (platform.isHost(targetUuid)) {
+            logHostTarget(kickerUuid, targetUuid);
+            return;
+        }
         platform.kick(targetUuid, "instant-p2p.msg.kicked_by", nameOrUnknown(kickerUuid));
         LOGGER.info("[expel] {} kicked by {}", targetUuid, kickerUuid);
     }
@@ -128,6 +139,12 @@ public final class ExpelManager {
         for (UUID target : List.copyOf(holders.keySet())) {
             readmit(leaving, target);
         }
+    }
+
+    /** 호스트는 추방·강퇴 대상이 아니다(원본 규칙) — op도 호스트로 치는 플랫폼이 있어 조용히 넘기면 고장처럼 보인다 */
+    private void logHostTarget(UUID sender, UUID target) {
+        LOGGER.info("[expel] {} 님의 요청 무시: 대상 {} 님은 호스트라 추방·강퇴할 수 없습니다 (serverUuid, op 또는 instantp2p.host 권한)",
+                nameOrUnknown(sender), nameOrUnknown(target));
     }
 
     private String nameOrUnknown(UUID id) {

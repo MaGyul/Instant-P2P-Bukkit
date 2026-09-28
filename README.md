@@ -121,7 +121,7 @@ QUIC 연결의 실제 UDP 출발 주소를 씁니다.
 
 ### 원본 서버 규칙 맞추기
 
-- **호스트:** `serverUuid`와 일치하거나 `instantp2p.host` 권한(Fabric은 op)이 있는 플레이어입니다. priority 4로 누구든 expel/kick할 수 있고, 자신은 대상이 되지 않습니다. `room_state`의 `hostUuid`로는 `serverUuid`를 보냅니다.
+- **호스트:** `serverUuid`와 일치하거나 `instantp2p.host` 권한(Fabric은 op)이 있는 플레이어입니다. priority 4로 누구든 expel/kick할 수 있고, 자신은 대상이 되지 않습니다. `instantp2p.host`는 기본값이 op라서 **op는 모드 UI로 추방·강퇴되지 않습니다**(거부하면 콘솔에 이유가 남습니다). op를 대상에 넣으려면 권한 플러그인으로 `instantp2p.host`를 빼면 됩니다. `room_state`의 `hostUuid`로는 `serverUuid`를 보냅니다.
 - **오프라인 expel:** 클라이언트는 접속할 때마다 자기 차단 목록 전체를 다시 보냅니다. 오프라인 대상도 holders에 기록해야 차단자가 있는 동안 입장이 막힙니다.
 - **Roles 갱신:** 폴링하지 않습니다. 호스트 시작 시 한 번, 로그인 때 쿨다운 60초로 비동기 갱신하고, 바뀌면 `room_state`를 다시 보냅니다.
 - **퇴장 시 갱신:** 퇴장 이벤트 시점에는 나가는 플레이어가 아직 온라인 목록에 있어서, `room_state`와 공개 방 인원수는 다음 틱에 보냅니다.
