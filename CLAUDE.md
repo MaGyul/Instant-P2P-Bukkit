@@ -90,9 +90,9 @@ MC 버전은 `Bukkit.getBukkitVersion()`(`getMinecraftVersion()`은 Paper 전용
   fallback에 인자 컴포넌트를 끼워 직접 만든다(`VelocityText.filled`). 모드 키는 클라이언트가 번역하므로 그대로.
 - 입장 suffix·밴 목록 없음(백엔드 몫), 호스트/관리자는 퍼미션(`instantp2p.host`, `instantp2p.notify.host`). 백엔드에는 플러그인 불필요. Velocity 3.x는 26.3 클라이언트를 못 받는다.
 
-### `universal` — 배포물 `universal/build/libs/instant-p2p-<ver>.jar`
+### `universal` — 배포물 `universal/build/libs/instant-p2p-server-<ver>.jar`
 Paper jar(공통 코드 포함) + Velocity 패키지·descriptor + Fabric 패키지(v1_21 remap판, v26)·descriptor를 합친다(중복은 실패).
-`checkUniversalJar`(build에 포함)가 descriptor 세 개, `paper-plugin.yml` 없음, relocate된 kwik, 서버 제공·원본 이름 라이브러리 미포함,
+`checkUniversalJar`(build에 포함)가 descriptor 세 개, 라이선스 고지(`META-INF/LICENSE`, `META-INF/licenses/` — 루트 `licenses/`에서 복사, LGPL 때문에 필수), `paper-plugin.yml` 없음, relocate된 kwik, 서버 제공·원본 이름 라이브러리 미포함,
 v1_21=intermediary·v26=Mojang 이름을 검사한다.
 
 | 로더 | descriptor | 진입 클래스 | 데이터 폴더 |

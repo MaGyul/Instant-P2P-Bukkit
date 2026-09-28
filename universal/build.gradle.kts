@@ -41,6 +41,10 @@ val universalJar by tasks.registering(Jar::class) {
         include("dev/magyul/instantp2p/fabric/**", "fabric.mod.json", "instant-p2p-server.mixins.json")
     }
 
+    // 이 프로젝트(CC0)와 함께 넣은 라이브러리(kwik·agent15 LGPL-3.0, hkdf Apache-2.0, siphash MIT)의 라이선스·고지
+    from(rootProject.file("LICENSE")) { into("META-INF") }
+    from(rootProject.file("licenses")) { into("META-INF/licenses") }
+
     // MC 내부를 이름으로 참조하지 않으므로 Paper의 플러그인 리매핑이 필요 없다 (다른 로더는 무시)
     manifest.attributes("paperweight-mappings-namespace" to "mojang")
     duplicatesStrategy = DuplicatesStrategy.FAIL
@@ -69,6 +73,11 @@ val checkUniversalJar by tasks.registering {
                 "dev/magyul/instantp2p/libs/kwik/core/QuicConnection.class",
                 "dev/magyul/instantp2p/libs/kwik/core/version.properties",
                 "i18n/ko.json",
+                // 함께 넣은 라이브러리의 라이선스 고지 (LGPL 등)
+                "META-INF/LICENSE",
+                "META-INF/licenses/THIRD-PARTY-NOTICES.txt",
+                "META-INF/licenses/LGPL-3.0.txt",
+                "META-INF/licenses/GPL-3.0.txt",
             ).filterNot(::has).forEach { problems += "없음: $it" }
 
             // paper-plugin.yml이 있으면 Paper와 Spigot 동작이 갈린다

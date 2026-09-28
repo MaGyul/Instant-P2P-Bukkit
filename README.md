@@ -3,12 +3,13 @@
 [instant-p2p](https://github.com/KITE2459/kfcudp-instant-p2p) 모드의 **호스트 기능을 서버 쪽으로 옮긴 것**입니다.
 모드를 설치한 클라이언트가 초대 코드나 공개 방 목록으로 서버에 그대로 접속할 수 있습니다. 서버 포트를 열 필요가 없습니다.
 
-> **상태:** 비공식 포트이며 배포하지 않습니다. 원본 모드 개발자에게 공동 유지보수를 제안하기 위한 작업물입니다.
-> 시그널링/STUN/TURN 서버는 원본 모드 개발자가 운영하는 인프라를 그대로 사용합니다.
+> 원본 모드 개발자의 승인을 받아 배포하는 서버용 통합판입니다. 원본 모드 **1.4 이상** 클라이언트와 연결됩니다.
+> 시그널링/STUN/TURN 서버는 원본 모드 개발자가 운영하는 인프라를 그대로 사용합니다 — 중계(TURN)는 직결이 안 될 때만 쓰이니,
+> 가능하면 `udpPort`를 정해 UDP로 열어 두어 원본 인프라의 부담을 줄여 주세요.
 
 ## 설치
 
-jar 하나(`instant-p2p-<버전>.jar`)를 서버에 넣으면 됩니다. 각 로더는 자기 descriptor만 읽습니다.
+jar 하나(`instant-p2p-server-<버전>.jar`)를 서버에 넣으면 됩니다. 각 로더는 자기 descriptor만 읽습니다.
 
 | 플랫폼 | 넣는 곳 | 설정 파일 | 비고 |
 |---|---|---|---|
@@ -53,9 +54,11 @@ Velocity만 `minecraftVersion`(비우면 첫 백엔드에 ping해서 정함)이 
 |---|---|
 | 서버 | Paper 1.21.11, Spigot 1.21.11, Fabric 1.21 / 1.21.11 / 26.1 / 26.3, Velocity 3.5.1 / 4.2.1 |
 | Java | 21 (26.x는 25) |
-| OS | Windows x86_64, Linux x86_64 (헤드리스) |
+| OS | Windows x86_64 |
+| 모드 | instant-p2p 1.4 |
 
-위 환경은 모드 1.3(QUIC)까지 확인했습니다. 모드 1.4(랑데부·정품 인증) 대응은 확인하는 중입니다.
+위 환경에서 모드 1.4 기준으로 로그인, 방 열기, 직결·중계 입장, 정원 초과 입장, 추방·강퇴, 설정 다시 읽기를 확인했습니다.
+공개 방 목록은 시그널링 쪽에서 멈춰 있어 아직 확인하지 못했습니다. Linux는 예전 버전(1.2.x)에서만 확인했습니다.
 
 ## 동작 구조
 
@@ -149,3 +152,5 @@ QUIC 연결의 실제 UDP 출발 주소를 씁니다.
 - 원본 모드: [instant-p2p](https://github.com/KITE2459/kfcudp-instant-p2p) (CC0)
 - [kwik](https://github.com/ptrd/kwik), agent15 (LGPL-3.0) — QUIC. `dev.magyul.instantp2p.libs`로 relocate해서 포함
 - [hkdf](https://github.com/patrickfav/hkdf) (Apache-2.0), [siphash](https://github.com/whitfin/siphash-java) (MIT)
+- 함께 넣은 라이브러리의 라이선스 전문과 고지는 [`licenses/`](licenses/)와 jar 안 `META-INF/licenses/`에 있습니다.
+  kwik·agent15는 LGPL-3.0이라, 이 저장소를 다른 버전으로 다시 빌드해 바꿔 넣을 수 있습니다(`gradle.properties`의 `kwikVersion`).

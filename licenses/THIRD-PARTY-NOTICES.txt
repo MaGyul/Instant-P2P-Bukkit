@@ -1,0 +1,41 @@
+instant-p2p server (instant-p2p 서버 통합판)
+==========================================
+
+This project itself is released under CC0 1.0 Universal (see LICENSE).
+It is based on instant-p2p by KITE2459 (CC0 1.0) — https://github.com/KITE2459/kfcudp-instant-p2p
+
+The distributed jar bundles the following third-party libraries.
+Their classes are relocated (package renamed) to dev.magyul.instantp2p.libs.*;
+no other changes are made. The build scripts that produce the bundled form are
+in this project's public repository — https://github.com/MaGyul/Instant-P2P-Bukkit
+
+
+Kwik 0.11 — QUIC implementation
+  Copyright (C) 2020-2026 Peter Doornbosch
+  License: GNU Lesser General Public License v3.0 or later (LGPL-3.0.txt, GPL-3.0.txt)
+  Source:  https://github.com/ptrd/kwik  (Maven: tech.kwik:kwik:0.11)
+
+Agent15 3.3 — TLS 1.3 implementation (used by Kwik)
+  Copyright (C) 2019-2026 Peter Doornbosch
+  License: GNU Lesser General Public License v3.0 or later (LGPL-3.0.txt, GPL-3.0.txt)
+  Source:  https://github.com/ptrd/agent15  (Maven: tech.kwik:agent15:3.3)
+
+HKDF 2.0.0
+  Copyright 2017 Patrick Favre-Bulle
+  License: Apache License 2.0 (Apache-2.0.txt)
+  Source:  https://github.com/patrickfav/hkdf  (Maven: at.favre.lib:hkdf:2.0.0)
+
+SipHash 2.0.1
+  Copyright (c) 2016 Isaac Whitfield
+  License: MIT (MIT-siphash.txt)
+  Source:  https://github.com/whitfin/siphash-java  (Maven: com.io7m.repackage.io.whitfin:io.whitfin.siphash:2.0.1)
+
+
+LGPL note / LGPL 안내
+---------------------
+Kwik and Agent15 are covered by the LGPL-3.0. You may replace them with a modified
+version by rebuilding this project from source with a different Kwik/Agent15 version
+(see gradle.properties "kwikVersion"); the relocation is applied by the build.
+
+Kwik과 Agent15는 LGPL-3.0입니다. 이 프로젝트를 소스에서 다시 빌드하면(gradle.properties의
+kwikVersion) 수정한 버전으로 바꿔 넣을 수 있습니다. 패키지 이름 변경(relocate)은 빌드가 합니다.
