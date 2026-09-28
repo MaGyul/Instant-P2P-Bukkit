@@ -74,11 +74,20 @@ public final class FabricImpl implements FabricEntry.Impl {
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> onStopping());
 
         // 정원 초과 입장: 터널로 들어온 개발자·서포터 (Mixin이 바닐라 정원 검사 직전에 부른다)
+        // 정원 검사는 로그인·설정 단계에서 두 번 불린다 — 같은 입장에 로그를 두 번 남기지 않는다
+        Map<UUID, Long> bypassLogged = new ConcurrentHashMap<>();
         PlayerLimitBypass.set((address, profile) -> {
             UUID id = Profiles.id(profile);
             boolean ok = id != null && address instanceof InetSocketAddress isa
                     && core.canBypassPlayerLimit(id, isa.getAddress());
-            if (ok) LOGGER.info("[host] 정원 초과 입장 허용: {} (개발자·서포터)", id);
+            if (ok) {
+                long now = System.currentTimeMillis();
+                bypassLogged.values().removeIf(t -> now - t > 30_000);
+                if (bypassLogged.putIfAbsent(id, now) == null) {
+                    String name = Profiles.name(profile);
+                    LOGGER.info("[host] 정원 초과 입장 허용: {} (개발자·서포터)", name != null ? name : id);
+                }
+            }
             return ok;
         });
 
@@ -117,7 +126,10 @@ public final class FabricImpl implements FabricEntry.Impl {
 
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             pendingJoinSuffix.remove(handler.player);
-            core.onQuit(handler.player.getUUID());
+            // 접속이 끊기는 쪽에서 오면 Netty 스레드에서 불린다(1.21.11 실측) — 퇴장 처리는 추방 해제·room_state 전송까지
+            // 플레이어 목록을 건드리므로 항상 서버 스레드로 넘긴다. 다음 틱이라 나가는 플레이어는 이미 목록에서 빠져 있다.
+            UUID id = handler.player.getUUID();
+            platform.runSync(() -> core.onQuit(id));
         });
     }
 

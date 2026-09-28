@@ -69,6 +69,10 @@ MC 버전은 `Bukkit.getBukkitVersion()`(`getMinecraftVersion()`은 Paper 전용
   `NoSuchMethodError`/`IllegalAccessError`가 난다. 실제로 걸린 것: `MinecraftServer.schedule`(없음)·`wrapRunnable`(protected),
   `ServerPlayer.sendSystemMessage(Component)`(없음 → `(Component, boolean)`), `ClickEvent`(1.21.5에 record로 바뀜 → `Compat`).
   서버 스레드로 넘길 때는 JDK `Executor.execute`만 쓴다(`FabricPlatform.runSync`).
+- **MC 클래스를 리플렉션으로 이름 찾기 금지** — 1.21.x 런타임은 intermediary라 record accessor도 `comp_XXXX`다
+  (`NameAndId.id()` = `comp_4422`, 1.21.11 정원 초과 입장이 안 되던 원인). authlib `GameProfile`은 난독화되지 않아 이름으로 되지만,
+  MC 쪽은 반환 타입으로 찾는다(`Profiles.id/name`).
+- 정원 검사(`canPlayerLogin`)는 로그인·설정 단계에서 두 번 불린다(Paper도 같음) — 로그는 한 번만.
 - **Mixin은 정원 초과 입장 하나뿐**(`mixin.v1_21/v26.PlayerListMixin`, `PlayerList.canPlayerLogin`에서 `canBypassPlayerLimit` 호출 직전 → null 반환 = 허용).
   설정(`instant-p2p-server.mixins.json`)의 목록은 비워 두고 `MixinPlugin.getMixins()`가 MC 버전으로 하나만 등록한다(`FabricEntry.implPackage`와 같은 기준).
   1.21.x판은 intermediary 문자열(`class_3324`/`method_14586`/`method_14609`, 1.21.0~1.21.11 공통) + `remap = false` — refmap은 디스크립터까지 고정하는데
@@ -80,6 +84,8 @@ MC 버전은 `Bukkit.getBukkitVersion()`(`getMinecraftVersion()`은 Paper 전용
   터널 접속의 첫 read에서 합성 `HAProxyMessage`를 먼저 흘린다 — `MinecraftConnection.channelRead`가 이걸 받으면 `remoteAddress`를 바꾼다.
   bind 전(ProxyInitializeEvent)에 걸어야 한다. proxy-protocol을 켠 리스너에서는 터널 접속(PROXY 헤더 없음)이 거부된다.
 - `room_update.version`: `config.json`의 `minecraftVersion`, 비우면 try 목록 첫 백엔드에 ping해 버전 이름에서 추출(실패 시 30초마다 재시도, 알아낸 뒤 공개 방 announce).
+- Velocity 콘솔은 모르는 번역 키의 fallback에 `%s` 인자를 채우지 않는다 → 서버판 키(`instant-p2p-server.*`)는 번역 컴포넌트 대신
+  fallback에 인자 컴포넌트를 끼워 직접 만든다(`VelocityText.filled`). 모드 키는 클라이언트가 번역하므로 그대로.
 - 입장 suffix·밴 목록 없음(백엔드 몫), 호스트/관리자는 퍼미션(`instantp2p.host`, `instantp2p.notify.host`). 백엔드에는 플러그인 불필요. Velocity 3.x는 26.3 클라이언트를 못 받는다.
 
 ### `universal` — 배포물 `universal/build/libs/instant-p2p-<ver>.jar`
@@ -177,6 +183,7 @@ v1_21=intermediary·v26=Mojang 이름을 검사한다.
   Fabric은 Mixin(아래 Fabric 절).
 - 테스트용 역할: `-Dinstantp2p.debug.dev|supporter|streamer=<uuid,...>`를 JVM 옵션으로 주면 시그널링 목록에 더한다(그 서버 안에서만, 기동 시 WARN).
 - 퇴장 이벤트 시점에는 나가는 플레이어가 아직 온라인 목록에 있음 → `room_state`/인원수는 다음 틱에.
+  Fabric 1.21.11은 `DISCONNECT`가 Netty 스레드에서 올 때가 있다 → 퇴장 처리 전체를 `runSync`로 서버 스레드에 넘긴다.
   **Fabric `server.execute()`는 서버 스레드에서 부르면 즉시 실행된다** — 다른 스레드를 한 번 거쳐 `execute`(`FabricPlatform.runSync`).
 - members probe는 worker 스레드에서 돌므로 플랫폼 온라인 목록 대신 `P2PCore`가 이벤트로 관리하는 UUID 집합을 쓴다.
 - 번역은 `Component.translatable(key, fallback)` — fallback의 `§` 코드는 떼고 맨 앞 색만 스타일로(콘솔 `LegacyFormattingDetected` 방지).
