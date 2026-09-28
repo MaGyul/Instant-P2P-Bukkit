@@ -196,7 +196,7 @@ v1_21=intermediary·v26=Mojang 이름을 검사한다.
 
 ## 테스트 체크리스트 (플랫폼마다)
 
-0. `/p2p login` → 코드 입력 → 로그인, 재시작 후 유지, `/p2p logout`이면 `account.dat`·키 삭제
+0. `/p2p login` → 코드 입력 → 로그인, 재시작 후 유지, `/p2p logout`이면 `account.dat` 삭제(키는 남김 — serverUuid가 같은 서버끼리 키 파일을 같이 쓴다)
 1. 기동/`/p2p open` 로그: `[tunnel] injected`, `[auth] 시그널링 인증 완료`, `[quic-host] listening`, `[host] rendezvous joined`, 후보 수집
 2. 초대 코드로 입장, 콘솔 로그인 줄에 실제 IPv4(직결) 또는 `24x.x.x.x`(중계 강제)가 찍히는지
 3. 두 명 연속 입장 시 throttle에 안 걸리는지(서로 다른 네트워크 필요), `/ban-ip` 후 재접속이 막히고 `/pardon-ip`로 풀리는지

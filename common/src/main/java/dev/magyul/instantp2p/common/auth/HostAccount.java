@@ -137,7 +137,7 @@ public final class HostAccount {
         if (t != null) t.interrupt();
     }
 
-    /** 로그아웃 — 진행 중인 로그인도 취소하고, 저장된 파일과 키를 지운다. */
+    /** 로그아웃 — 진행 중인 로그인도 취소하고, 저장된 로그인 정보(암호문)를 지운다. 키는 남긴다(TokenStore.delete). */
     public synchronized boolean logout() {
         boolean had = account != null || pendingThread != null || store.exists();
         Thread t = pendingThread;

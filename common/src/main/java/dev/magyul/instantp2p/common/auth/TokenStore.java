@@ -102,15 +102,15 @@ final class TokenStore {
         }
     }
 
-    /** 로그아웃 — 암호문과 키를 모두 지운다. */
+    /**
+     * 로그아웃 — 암호문만 지운다. 키는 남긴다: 암호문 없이는 쓸모가 없고, 서버 폴더를 복사해 serverUuid가 같은 서버가
+     * 여럿이면 키 파일을 같이 쓰므로 한쪽의 로그아웃이 다른 서버의 로그인을 풀 수 없게 만들었다(Paper·Spigot 실측).
+     */
     void delete() {
-        for (Path p : new Path[]{dataFile, homeKeyFile, localKeyFile}) {
-            if (p == null) continue;
-            try {
-                Files.deleteIfExists(p);
-            } catch (IOException e) {
-                LOG.warn("[auth] {} 삭제 실패: {}", p.getFileName(), e.getMessage());
-            }
+        try {
+            Files.deleteIfExists(dataFile);
+        } catch (IOException e) {
+            LOG.warn("[auth] {} 삭제 실패: {}", dataFile.getFileName(), e.getMessage());
         }
     }
 
