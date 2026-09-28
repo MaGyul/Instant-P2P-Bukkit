@@ -112,7 +112,13 @@ public final class QuicHost {
 
         QuicIce agent = openIce(core.settings().udpPort());
         ice = agent;
-        agent.enableTurn(P2PConfig.TURN_URL, P2PConfig.TURN_USERNAME, P2PConfig.TURN_CREDENTIAL);
+        // TURN 계정은 방장 계정 인증으로 받는다(1.4). 못 받으면 중계 없이(직결만) 간다.
+        String[] turn = core.account().turnCredentials();
+        if (turn != null) {
+            agent.enableTurn(P2PConfig.TURN_URL, turn[0], turn[1]);
+        } else {
+            LOG.warn("[turn] 중계 계정이 없어 중계 없이 엽니다 (직결만 가능)");
+        }
         candidates = agent.gather();
 
         server = ServerConnector.builder()

@@ -8,11 +8,12 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.util.Collection;
-import java.util.Random;
+import java.security.SecureRandom;
 import java.util.UUID;
 
 public class Utils {
-    private static final Random RANDOM = new Random();
+    /** 초대 코드가 사실상 유일한 비밀이라 예측 불가능한 난수를 쓴다 */
+    private static final SecureRandom RANDOM = new SecureRandom();
     private static final String CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
     public static String encodePlayerHashes(Collection<UUID> players, String roomCode) {
@@ -33,6 +34,15 @@ public class Utils {
             sb.append(CODE_CHARS.charAt(RANDOM.nextInt(CODE_CHARS.length())));
         }
         return sb.toString();
+    }
+
+    /** {@link #generateCode()}가 만든 형식(허용 글자 10자리)인지 */
+    public static boolean isValidCode(String code) {
+        if (code == null || code.length() != 10) return false;
+        for (int i = 0; i < code.length(); i++) {
+            if (CODE_CHARS.indexOf(code.charAt(i)) < 0) return false;
+        }
+        return true;
     }
 
     /**

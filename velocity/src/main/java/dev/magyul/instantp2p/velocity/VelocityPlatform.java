@@ -4,6 +4,8 @@ import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier;
 import dev.magyul.instantp2p.common.core.P2PPlatform;
+import dev.magyul.instantp2p.common.core.P2PSender;
+import dev.magyul.instantp2p.common.core.P2PText;
 import dev.magyul.instantp2p.common.core.P2PSettings;
 import dev.magyul.instantp2p.common.i18n.I18n;
 import dev.magyul.instantp2p.common.network.packet.Moderation;
@@ -73,6 +75,25 @@ final class VelocityPlatform implements P2PPlatform {
     @Override
     public Path dataFolder() {
         return dataFolder;
+    }
+
+    /** 와일드카드 bind면 루프백, 특정 주소에 bind했으면 그 주소 */
+    @Override
+    public String targetHost() {
+        java.net.InetSocketAddress bind = server.getBoundAddress();
+        if (bind.getAddress() == null || bind.getAddress().isAnyLocalAddress()) return "127.0.0.1";
+        return bind.getAddress().getHostAddress();
+    }
+
+    @Override
+    public String motd() {
+        return net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+                .serialize(server.getConfiguration().getMotd());
+    }
+
+    @Override
+    public P2PSender console() {
+        return (key, args) -> server.getConsoleCommandSource().sendMessage(VelocityText.translatable(key, P2PText.plain(args)));
     }
 
     @Override

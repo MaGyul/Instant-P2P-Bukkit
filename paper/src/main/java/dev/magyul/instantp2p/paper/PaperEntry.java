@@ -1,7 +1,6 @@
 package dev.magyul.instantp2p.paper;
 
 import dev.magyul.instantp2p.common.MinecraftVersions;
-import dev.magyul.instantp2p.common.Utils;
 import dev.magyul.instantp2p.common.core.P2PCore;
 import dev.magyul.instantp2p.common.core.P2PSettings;
 import dev.magyul.instantp2p.common.tunnel.TunnelInjector;
@@ -34,10 +33,6 @@ public final class PaperEntry extends JavaPlugin {
             saveDefaultConfig();
             LOGGER.info("컨피그를 불러오는 중...");
             settings = PaperSettings.load(this);
-            if (!settings.enabled()) {
-                LOGGER.info("P2P 기능이 비활성화 되어있으므로 플러그인이 비활성화됩니다.");
-                Bukkit.getPluginManager().disablePlugin(this);
-            }
         } catch (Exception e) {
             LOGGER.error("컨피그를 불러오는데 실패 했습니다! 컨피그 파일이 존재 하는지, 파일에 문제가 없나요?", e);
             Bukkit.getPluginManager().disablePlugin(this);
@@ -50,7 +45,7 @@ public final class PaperEntry extends JavaPlugin {
             Bukkit.getPluginManager().disablePlugin(this);
             return;
         }
-        if (settings == null || !settings.enabled()) return;
+        if (settings == null) return;
 
         ServerText text = ServerText.detect();
         PaperPlatform platform = new PaperPlatform(this, settings, text, minecraftVersion);
@@ -68,29 +63,15 @@ public final class PaperEntry extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new InstantP2pListener(core, text), this);
         FullCheckListener.register(this, core);
 
-        // 버킷이 완전히 켜진 후 스캐줄이 돌아가므로 버킷이 켜지고 안정화가 시작될때 P2P 서비스를 시작한다.
-        Bukkit.getScheduler().runTask(this, () -> {
-            LOGGER.info("초대 코드 생성중...");
-            String inviteCode = Utils.generateCode();
+        var command = getCommand("p2p");
+        if (command != null) {
+            P2PCommandExecutor executor = new P2PCommandExecutor(core, text);
+            command.setExecutor(executor);
+            command.setTabCompleter(executor);
+        }
 
-            try {
-                core.bridge().startHost(inviteCode, "127.0.0.1:" + platform.listenPort());
-            } catch (Exception e) {
-                LOGGER.error("[instant-p2p] Failed to start host: {}", e.getMessage(), e);
-            }
-
-            LOGGER.info("초대 코드: {}", inviteCode);
-
-            String title = settings.title();
-            if (title.isEmpty()) {
-                title = motd();
-            }
-
-            if (settings.publicRoom()) {
-                core.bridge().publishPublicRoom(inviteCode, title, settings.name(), settings.serverUuid().toString(),
-                        getServer().getOnlinePlayers().size(), getServer().getMaxPlayers());
-            }
-        });
+        // 스케줄러는 서버가 완전히 켜진 뒤에 돈다 — 그때 자동 열기(enabled)를 확인한다
+        Bukkit.getScheduler().runTask(this, () -> core.host().autoStart());
     }
 
     /** room_update.version — 클라이언트가 문자열 비교한다. getBukkitVersion()은 "1.21.11-R0.1-SNAPSHOT" 형식(Paper/Spigot 공통). */
@@ -98,12 +79,6 @@ public final class PaperEntry extends JavaPlugin {
         String bukkit = Bukkit.getBukkitVersion();
         int dash = bukkit.indexOf('-');
         return dash > 0 ? bukkit.substring(0, dash) : bukkit;
-    }
-
-    /** 서버 MOTD(레거시 서식 문자열). Paper에서 deprecated지만 Spigot과 공통으로 쓸 수 있는 건 이것뿐이다. */
-    @SuppressWarnings("deprecation")
-    private static String motd() {
-        return Bukkit.getMotd();
     }
 
     /** CraftServer.getServer() → MinecraftServer(DedicatedServer). Paper/Spigot 공통, 이름은 Bukkit 구현 쪽이라 매핑과 무관. */
@@ -123,6 +98,6 @@ public final class PaperEntry extends JavaPlugin {
 
         TunnelInjector.uninject();
         core.tunnels().clear();
-        core.bridge().stopHost();
+        core.host().shutdown();
     }
 }

@@ -36,7 +36,7 @@ public final class JsonSettings {
         }
         String before = GSON.toJson(json);
 
-        boolean enabled = bool(json, "enabled", true);
+        boolean enabled = bool(json, "enabled", false);
         String name = string(json, "name", "Server");
         String title = string(json, "title", "");
         boolean publicRoom = bool(json, "publicRoom", true);

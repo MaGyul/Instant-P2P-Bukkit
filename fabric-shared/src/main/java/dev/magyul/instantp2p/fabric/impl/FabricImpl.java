@@ -1,6 +1,5 @@
 package dev.magyul.instantp2p.fabric.impl;
 
-import dev.magyul.instantp2p.common.Utils;
 import dev.magyul.instantp2p.common.core.P2PCore;
 import dev.magyul.instantp2p.common.core.JsonSettings;
 import dev.magyul.instantp2p.common.core.P2PSettings;
@@ -60,16 +59,12 @@ public final class FabricImpl implements FabricEntry.Impl {
             LOGGER.error("컨피그를 불러오는데 실패 했습니다! config/{}/config.json 파일에 문제가 없나요?", MOD_DIR, e);
             return;
         }
-        if (!settings.enabled()) {
-            LOGGER.info("P2P 기능이 비활성화 되어있으므로 instant-p2p가 비활성화됩니다.");
-            return;
-        }
-
         String version = loader.getModContainer("minecraft")
                 .map(c -> c.getMetadata().getVersion().getFriendlyString()).orElse("unknown");
         platform = new FabricPlatform(settings, dataFolder, loader.getGameDir(), version);
         core = new P2PCore(platform);
 
+        FabricCommand.register(core, platform);
         Compat.registerPayloads();
         // 1.20.5+ 수신 핸들러는 서버 스레드에서 돈다
         ServerPlayNetworking.registerGlobalReceiver(Payloads.ModerationPayload.TYPE,
@@ -116,7 +111,7 @@ public final class FabricImpl implements FabricEntry.Impl {
             // (server.execute도 서버 스레드에서 부르면 미루지 않고 즉시 실행한다)
             core.onJoin(player.getUUID());
             if (core.ipRestoreUnavailable() && platform.isAdmin(player)) {
-                player.sendSystemMessage(FabricText.translatable(P2PCore.IP_RESTORE_UNAVAILABLE));
+                player.sendSystemMessage(FabricText.translatable(P2PCore.IP_RESTORE_UNAVAILABLE), false); // (Component) 오버로드는 1.21.0에 없다
             }
         });
 
@@ -131,28 +126,14 @@ public final class FabricImpl implements FabricEntry.Impl {
         // IP 복원은 실패해도 접속은 되므로 끄지 않는다 (관리자에게만 알림)
         TunnelInjector.inject(server, core.tunnels(), core::markIpRestoreUnavailable);
 
-        LOGGER.info("초대 코드 생성중...");
-        String inviteCode = Utils.generateCode();
-        try {
-            core.bridge().startHost(inviteCode, "127.0.0.1:" + platform.listenPort());
-        } catch (Exception e) {
-            LOGGER.error("[instant-p2p] Failed to start host: {}", e.getMessage(), e);
-        }
-        LOGGER.info("초대 코드: {}", inviteCode);
-
-        P2PSettings settings = platform.settings();
-        if (settings.publicRoom()) {
-            String title = settings.title().isEmpty() ? server.getMotd() : settings.title();
-            core.bridge().publishPublicRoom(inviteCode, title, settings.name(), settings.serverUuid().toString(),
-                    server.getPlayerCount(), server.getPlayerList().getMaxPlayers());
-        }
+        core.host().autoStart();
     }
 
     private void onStopping() {
         PlayerLimitBypass.set(null);
         TunnelInjector.uninject();
         core.tunnels().clear();
-        core.bridge().stopHost();
+        core.host().shutdown();
     }
 
     /**

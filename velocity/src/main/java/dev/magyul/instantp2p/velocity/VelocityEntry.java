@@ -12,14 +12,12 @@ import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
-import dev.magyul.instantp2p.common.Utils;
 import dev.magyul.instantp2p.common.core.JsonSettings;
 import dev.magyul.instantp2p.common.core.P2PCore;
+import dev.magyul.instantp2p.common.core.P2PCommand;
 import dev.magyul.instantp2p.common.core.P2PSettings;
-import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.slf4j.Logger;
 
-import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.util.concurrent.TimeUnit;
 
@@ -48,7 +46,6 @@ public final class VelocityEntry {
     private P2PCore core;
     private VelocityPlatform platform;
     private final VelocityTunnelInjector injector = new VelocityTunnelInjector();
-    private volatile String inviteCode;
 
     @Inject
     public VelocityEntry(ProxyServer server, Logger logger, @DataDirectory Path dataDirectory) {
@@ -71,39 +68,22 @@ public final class VelocityEntry {
             logger.error("컨피그를 불러오는데 실패 했습니다! {} 파일에 문제가 없나요?", dataDirectory.resolve(CONFIG_FILE), e);
             return;
         }
-        if (!settings.enabled()) {
-            logger.info("P2P 기능이 비활성화 되어있으므로 instant-p2p가 비활성화됩니다.");
-            return;
-        }
-
         platform = new VelocityPlatform(this, server, settings, dataDirectory);
         core = new P2PCore(platform);
 
         // bind 전에 걸어야 새 리스너 채널에 적용된다. 실패해도 접속은 되므로 끄지 않는다 (관리자에게만 알림)
         if (!injector.inject(server, core.tunnels())) core.markIpRestoreUnavailable();
         server.getChannelRegistrar().register(VelocityPlatform.ROOM_STATE, VelocityPlatform.MODERATION);
-
-        logger.info("초대 코드 생성중...");
-        inviteCode = Utils.generateCode();
-        try {
-            core.bridge().startHost(inviteCode, targetHost() + ":" + platform.listenPort());
-        } catch (Exception e) {
-            logger.error("[instant-p2p] Failed to start host: {}", e.getMessage(), e);
-        }
-        logger.info("초대 코드: {}", inviteCode);
+        server.getCommandManager().register(
+                server.getCommandManager().metaBuilder(P2PCommand.NAME).plugin(this).build(), new VelocityCommand(core));
 
         if (!configuredVersion.isBlank()) {
             publishWithVersion(configuredVersion.trim());
         } else {
             resolveBackendVersion();
         }
-    }
-
-    /** 터널 다이얼 대상 — 와일드카드 bind면 루프백, 특정 주소에 bind했으면 그 주소 */
-    private String targetHost() {
-        InetSocketAddress bind = server.getBoundAddress();
-        if (bind.getAddress() == null || bind.getAddress().isAnyLocalAddress()) return "127.0.0.1";
-        return bind.getAddress().getHostAddress();
+        // 리스너 bind 뒤에 열어야 터널 다이얼이 붙는다 — 스케줄러로 한 박자 미룬다
+        server.getScheduler().buildTask(this, () -> core.host().autoStart()).schedule();
     }
 
     /** 백엔드가 아직 안 켜졌을 수 있어 성공할 때까지 재시도한다. 버전을 알아야 공개 방을 올린다. */
@@ -121,15 +101,10 @@ public final class VelocityEntry {
         });
     }
 
+    /** 버전을 알면 공개 방을 올릴 수 있다 — 방이 이미 열려 있으면 지금 올린다 */
     private void publishWithVersion(String version) {
         platform.setMinecraftVersion(version);
-        P2PSettings settings = platform.settings();
-        if (!settings.publicRoom() || inviteCode == null) return;
-        String title = settings.title().isEmpty()
-                ? PlainTextComponentSerializer.plainText().serialize(server.getConfiguration().getMotd())
-                : settings.title();
-        core.bridge().publishPublicRoom(inviteCode, title, settings.name(), settings.serverUuid().toString(),
-                server.getPlayerCount(), platform.maxPlayers());
+        core.host().publishPublicRoom();
     }
 
     @Subscribe
@@ -137,7 +112,7 @@ public final class VelocityEntry {
         if (core == null) return;
         injector.uninject();
         core.tunnels().clear();
-        core.bridge().stopHost();
+        core.host().shutdown();
     }
 
     @Subscribe

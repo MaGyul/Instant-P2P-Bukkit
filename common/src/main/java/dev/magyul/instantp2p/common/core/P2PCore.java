@@ -1,6 +1,7 @@
 package dev.magyul.instantp2p.common.core;
 
 import dev.magyul.instantp2p.common.DevBadge;
+import dev.magyul.instantp2p.common.auth.HostAccount;
 import dev.magyul.instantp2p.common.network.PacketByteBuf;
 import dev.magyul.instantp2p.common.network.packet.Moderation;
 import dev.magyul.instantp2p.common.network.packet.RoomState;
@@ -37,6 +38,8 @@ public final class P2PCore {
     private final Set<UUID> onlinePlayers = ConcurrentHashMap.newKeySet();
     private final ExpelManager expel;
     private final P2PBridge bridge;
+    private final HostAccount account;
+    private final HostController host;
     private volatile boolean ipRestoreUnavailable;
     /** 터널로 로그인 중인 UUID → 기록 시각. 정원 검사 이벤트에 주소가 없는 플랫폼(Paper)이 쓴다. */
     private final Map<UUID, Long> tunnelLogins = new ConcurrentHashMap<>();
@@ -45,6 +48,8 @@ public final class P2PCore {
         this.platform = platform;
         this.expel = new ExpelManager(platform, this::broadcastRoomState);
         this.bridge = new P2PBridge(this);
+        this.account = new HostAccount(platform.dataFolder(), platform.settings().serverUuid().toString());
+        this.host = new HostController(this);
     }
 
     public P2PPlatform platform() { return platform; }
@@ -52,6 +57,8 @@ public final class P2PCore {
     public TunnelRegistry tunnels() { return tunnels; }
     public ExpelManager expel() { return expel; }
     public P2PBridge bridge() { return bridge; }
+    public HostAccount account() { return account; }
+    public HostController host() { return host; }
 
     /** IP 복원이 꺼진 상태인지 — 관리자가 입장할 때마다 다시 알린다. */
     public boolean ipRestoreUnavailable() {

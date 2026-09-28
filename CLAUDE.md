@@ -59,6 +59,10 @@ MC 버전은 `Bukkit.getBukkitVersion()`(`getMinecraftVersion()`은 Paper 전용
 - 입장 suffix: `ServerPlayConnectionEvents.INIT`(입장 메시지보다 먼저)에서 준비, `ServerMessageEvents.ALLOW_GAME_MESSAGE`에서 `multiplayer.player.joined`를 가로채 붙인다.
   바닐라는 입장 메시지를 플레이어를 목록에 넣기 전에 보내서 입장한 본인은 자기 입장 메시지를 못 본다(Paper는 보임).
 - Loom 1.18+는 Gradle을 Java 25로 돌려야 한다 → JDK 25 설치 필요.
+- **1.21.x판은 1.21.11로 컴파일하지만 1.21.0에서도 돈다** — 새로 생긴 오버로드·접근 제한이 풀린 메서드는 컴파일은 되고 1.21.0에서
+  `NoSuchMethodError`/`IllegalAccessError`가 난다. 실제로 걸린 것: `MinecraftServer.schedule`(없음)·`wrapRunnable`(protected),
+  `ServerPlayer.sendSystemMessage(Component)`(없음 → `(Component, boolean)`), `ClickEvent`(1.21.5에 record로 바뀜 → `Compat`).
+  서버 스레드로 넘길 때는 JDK `Executor.execute`만 쓴다(`FabricPlatform.runSync`).
 - **Mixin은 정원 초과 입장 하나뿐**(`mixin.v1_21/v26.PlayerListMixin`, `PlayerList.canPlayerLogin`에서 `canBypassPlayerLimit` 호출 직전 → null 반환 = 허용).
   설정(`instant-p2p-server.mixins.json`)의 목록은 비워 두고 `MixinPlugin.getMixins()`가 MC 버전으로 하나만 등록한다(`FabricEntry.implPackage`와 같은 기준).
   1.21.x판은 intermediary 문자열(`class_3324`/`method_14586`/`method_14609`, 1.21.0~1.21.11 공통) + `remap = false` — refmap은 디스크립터까지 고정하는데

@@ -190,7 +190,9 @@ class ExpelManagerTest {
         @Override public int maxPlayers() { return 20; }
         @Override public String minecraftVersion() { return "1.21.11"; }
         @Override public int listenPort() { return 25565; }
-        @Override public Path dataFolder() { return Path.of("."); }
+        @Override public Path dataFolder() { return Path.of("build", "test-data"); }
+        @Override public String motd() { return "motd"; }
+        @Override public P2PSender console() { return (key, args) -> {}; }
         @Override public boolean isOnline(UUID player) { return online.contains(player); }
         @Override public String playerName(UUID player) { return names && online.contains(player) ? player.toString() : null; }
         @Override public boolean isHost(UUID player) { return HOST.equals(player); }

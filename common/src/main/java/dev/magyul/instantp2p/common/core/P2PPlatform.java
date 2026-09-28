@@ -22,14 +22,25 @@ public interface P2PPlatform {
 
     int maxPlayers();
 
-    /** room_update.version — 클라이언트가 문자열 비교하므로 실제 서버 MC 버전이어야 한다. */
+    /** room_update.version — 클라이언트가 문자열 비교하므로 실제 서버 MC 버전이어야 한다. 아직 모르면 null(Velocity). */
     String minecraftVersion();
 
     /** 터널 다이얼 대상 포트 (서버/프록시 리스닝 포트) */
     int listenPort();
 
-    /** 플러그인/모드 데이터 폴더 (네이티브 라이브러리를 여기에 푼다) */
+    /** 터널 다이얼 대상 호스트 */
+    default String targetHost() {
+        return "127.0.0.1";
+    }
+
+    /** 공개 방 제목 기본값 (설정 title이 비었을 때) — 서버 MOTD 첫 줄 */
+    String motd();
+
+    /** 플러그인/모드 데이터 폴더 (설정, 로그인 정보, 상태 파일) */
     Path dataFolder();
+
+    /** 콘솔 — 서버 기동 시 자동 열기 결과 등을 받는다. */
+    P2PSender console();
 
     /** 서버 스레드. */
     boolean isOnline(UUID player);

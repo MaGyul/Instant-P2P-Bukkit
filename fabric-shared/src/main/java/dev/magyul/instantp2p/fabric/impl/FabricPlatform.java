@@ -1,6 +1,7 @@
 package dev.magyul.instantp2p.fabric.impl;
 
 import dev.magyul.instantp2p.common.core.P2PPlatform;
+import dev.magyul.instantp2p.common.core.P2PSender;
 import dev.magyul.instantp2p.common.core.P2PSettings;
 import dev.magyul.instantp2p.common.i18n.I18n;
 import dev.magyul.instantp2p.fabric.ServerListFiles;
@@ -72,6 +73,18 @@ final class FabricPlatform implements P2PPlatform {
         return dataFolder;
     }
 
+    @Override
+    public String motd() {
+        MinecraftServer s = server;
+        return s != null ? s.getMotd() : "";
+    }
+
+    /** 콘솔 로그로 — 서식 코드 없이 */
+    @Override
+    public P2PSender console() {
+        return (key, args) -> LOGGER.info(I18n.stripLegacy(I18n.format(key, args)));
+    }
+
     private ServerPlayer player(UUID id) {
         MinecraftServer s = server;
         return s != null ? s.getPlayerList().getPlayer(id) : null;
@@ -106,7 +119,7 @@ final class FabricPlatform implements P2PPlatform {
         MinecraftServer s = server;
         if (s == null) return;
         for (ServerPlayer p : s.getPlayerList().getPlayers()) {
-            if (isAdmin(p)) p.sendSystemMessage(FabricText.translatable(translationKey, args));
+            if (isAdmin(p)) p.sendSystemMessage(FabricText.translatable(translationKey, args), false); // (Component) 오버로드는 1.21.0에 없다
         }
     }
 
@@ -117,12 +130,22 @@ final class FabricPlatform implements P2PPlatform {
     /**
      * 항상 작업 큐에 넣는다. {@code server.execute()}는 서버 스레드에서 부르면 미루지 않고 즉시 실행해서
      * "다음 틱에"(Paper runTask와 같은 의미)가 되지 않는다 — 퇴장 이벤트 등에서 필요하다.
+     * <p>
+     * 그래서 다른 스레드를 한 번 거쳐 {@code execute}로 넣는다(서버 스레드가 아니면 항상 큐에 들어간다).
+     * 큐에 직접 넣는 API는 버전마다 달라 쓸 수 없다 — {@code schedule}은 1.21.0에 없고 {@code wrapRunnable}은 protected였다.
+     * {@code execute}는 JDK {@code Executor} 메서드라 이름·접근이 모든 버전에서 같다.
      */
     @Override
     public void runSync(Runnable task) {
         MinecraftServer s = server;
-        if (s != null) s.schedule(s.wrapRunnable(task));
+        if (s != null) HOP.execute(() -> s.execute(task));
     }
+
+    private static final java.util.concurrent.Executor HOP = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "instant-p2p-sync");
+        t.setDaemon(true);
+        return t;
+    });
 
     @Override
     public void broadcastRoomState(byte[] payload) {

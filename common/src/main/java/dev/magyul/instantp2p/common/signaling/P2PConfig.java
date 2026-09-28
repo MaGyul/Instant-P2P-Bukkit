@@ -17,25 +17,29 @@ public final class P2PConfig {
     public static final int MAX_CHANNEL_LENGTH = 24;
     public static final int PUBLIC_ROOM_SHARD_COUNT = 4;
 
+    /**
+     * mc-signaling — TLS(wss). 원본 1.4부터 평문 8090은 닫혔다(지문·후보·토큰이 그대로 보이므로).
+     * {@link WebSocketClient}는 wss일 때 인증서 도메인까지 확인한다. {@code -Dkfcudp.signaling}으로 바꿀 수 있다.
+     */
     public static final String SIGNALING_URL =
-            System.getProperty("kfcudp.signaling", "ws://kite-private-cloud.kro.kr:8090");
+            System.getProperty("kfcudp.signaling", "wss://kite-private-cloud.kro.kr");
     public static final String SIGNALING_HTTP_URL =
             SIGNALING_URL.startsWith("wss://") ? "https://" + SIGNALING_URL.substring(6)
                     : SIGNALING_URL.startsWith("ws://") ? "http://" + SIGNALING_URL.substring(5)
                       : SIGNALING_URL;
 
-    /** coturn STUN (무인증) */
+    /** 1.4 전용 coturn(3490, 임시 계정 방식) */
     public static final String STUN_URL =
-            System.getProperty("kfcudp.stun", "stun:kite-private-cloud.kro.kr:3478");
-    /** coturn TURN (정적 계정 인증) */
+            System.getProperty("kfcudp.stun", "stun:kite-private-cloud.kro.kr:3490");
     public static final String TURN_URL =
-            System.getProperty("kfcudp.turn", "turn:kite-private-cloud.kro.kr:3478");
+            System.getProperty("kfcudp.turn", "turn:kite-private-cloud.kro.kr:3490");
 
-
-    public static final String TURN_USERNAME =
-            System.getProperty("kfcudp.turn.user", "minecraft");
-    public static final String TURN_CREDENTIAL =
-            System.getProperty("kfcudp.turn.pass", "minecraft");
+    /**
+     * TURN 계정 — <b>기본값이 없다</b>. 방장 계정 인증을 거쳐 시그널링에서 받는다({@code HostAccount.turnCredentials}).
+     * 이 두 값은 테스트용 덮어쓰기일 뿐이다.
+     */
+    public static final String TURN_USERNAME = System.getProperty("kfcudp.turn.user");
+    public static final String TURN_CREDENTIAL = System.getProperty("kfcudp.turn.pass");
 
     private P2PConfig() {}
 

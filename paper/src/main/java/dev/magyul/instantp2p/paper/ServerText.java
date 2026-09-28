@@ -1,5 +1,6 @@
 package dev.magyul.instantp2p.paper;
 
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -13,7 +14,8 @@ interface ServerText {
 
     void kick(Player player, String key, Object... args);
 
-    void send(Player player, String key, Object... args);
+    /** 플레이어·콘솔 공용 */
+    void send(CommandSender sender, String key, Object... args);
 
     void disallow(AsyncPlayerPreLoginEvent event, AsyncPlayerPreLoginEvent.Result result, String key, Object... args);
 

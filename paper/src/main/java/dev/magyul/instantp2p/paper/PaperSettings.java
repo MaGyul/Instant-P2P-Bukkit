@@ -14,7 +14,7 @@ final class PaperSettings {
     static P2PSettings load(JavaPlugin plugin) {
         FileConfiguration config = plugin.getConfig();
         return new P2PSettings(
-                config.getBoolean("enabled", true),
+                config.getBoolean("enabled", false),
                 serverUuid(plugin, config),
                 config.getString("targetModVersion", "auto"),
                 config.getString("title", ""),

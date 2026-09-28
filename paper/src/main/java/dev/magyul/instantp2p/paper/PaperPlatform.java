@@ -1,6 +1,8 @@
 package dev.magyul.instantp2p.paper;
 
 import dev.magyul.instantp2p.common.core.P2PPlatform;
+import dev.magyul.instantp2p.common.core.P2PSender;
+import dev.magyul.instantp2p.common.core.P2PText;
 import dev.magyul.instantp2p.common.core.P2PSettings;
 import dev.magyul.instantp2p.common.i18n.I18n;
 import dev.magyul.instantp2p.common.network.packet.RoomState;
@@ -58,6 +60,18 @@ final class PaperPlatform implements P2PPlatform {
     @Override
     public Path dataFolder() {
         return plugin.getDataFolder().toPath();
+    }
+
+    /** 서버 MOTD(레거시 서식 문자열). Paper에서 deprecated지만 Spigot과 공통으로 쓸 수 있는 건 이것뿐이다. */
+    @Override
+    @SuppressWarnings("deprecation")
+    public String motd() {
+        return Bukkit.getMotd();
+    }
+
+    @Override
+    public P2PSender console() {
+        return (key, args) -> text.send(Bukkit.getConsoleSender(), key, P2PText.plain(args));
     }
 
     @Override
