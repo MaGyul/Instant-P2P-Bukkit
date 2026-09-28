@@ -120,7 +120,7 @@ v1_21=intermediary·v26=Mojang 이름을 검사한다.
 설정 키: `enabled`, `serverUuid`, `targetModVersion`, `title`, `name`, `publicRoom`, `channels`, `channelAnd`, `allowBroadcast`, `udpPort`
 (Velocity만 `minecraftVersion` 추가).
 - `targetModVersion`: 기본 `auto` — 공개 방 로비에 접속할 때 시그널링 `/api/v1/version`의 `current`를 받는다(`signaling/ModVersion`).
-  성공값은 announce를 멈출 때까지 재사용, 실패하면 `1.3`으로 올리고 다음 재접속 때 다시 묻는다. 폴링하지 않는다(실행 중 새 버전이 나오면 재시작해야 반영).
+  성공값은 announce를 멈출 때까지 재사용, 실패하거나 1.4.1 미만(버전 API 갱신 지연)이면 `1.4.1`로 올리고 다음 재접속 때 다시 묻는다. 폴링하지 않는다(실행 중 새 버전이 나오면 재시작해야 반영).
 - `udpPort`: QUIC UDP 포트, 기본 0(임의). 이미 쓰이면 경고 후 임의 포트. 방화벽에서 열어 두면 직결이 잘 된다.
   25565 UDP는 `enable-query`, 24454는 Simple Voice Chat, 19132는 Geyser가 쓰므로 피하라고 안내.
 

@@ -3,6 +3,7 @@ package dev.magyul.instantp2p.common.signaling;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import dev.magyul.instantp2p.common.MinecraftVersions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,7 +30,9 @@ public final class ModVersion {
 
     public static final String AUTO = "auto";
     /** 조회 실패 시 — 이 빌드가 맞춘 원본 모드 버전 */
-    public static final String FALLBACK = "1.3";
+    public static final String FALLBACK = "1.4.1";
+    /** 서버판에 붙을 수 있는 가장 낮은 모드 버전 — 원본 개발자: 1.4 이하는 동작하지 않게 막았다 */
+    private static final int[] MIN_SUPPORTED = {1, 4, 1};
 
     private static final Pattern VALID = Pattern.compile("[0-9A-Za-z.+_-]{1,32}");
     private static final Duration HTTP_TIMEOUT = Duration.ofSeconds(5);
@@ -53,8 +56,14 @@ public final class ModVersion {
             LOG.warn("[public-room] 모드 버전 조회 실패 — {}로 올린다", FALLBACK);
             return FALLBACK;
         }
+        if (!MinecraftVersions.atLeast(v, MIN_SUPPORTED)) {
+            // 버전 API 갱신이 늦은 경우 — 그 버전 클라이언트는 어차피 붙지 못하니 그 목록에 올려 봐야 소용없다
+            LOG.warn("[public-room] 시그널링이 알려준 모드 버전 {}은 지원하지 않는 버전이라 {}로 올린다", v, FALLBACK);
+            v = FALLBACK;
+        } else {
+            LOG.info("[public-room] 모드 버전 {} (시그널링 서버 기준)", v);
+        }
         fetched = v;
-        LOG.info("[public-room] 모드 버전 {} (시그널링 서버 기준)", v);
         return v;
     }
 
