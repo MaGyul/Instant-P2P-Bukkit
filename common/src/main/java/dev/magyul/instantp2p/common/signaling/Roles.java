@@ -54,17 +54,9 @@ public final class Roles {
             {0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00};
     private static final PublicKey SIGNING_KEY = loadPublicKey();
 
-    /**
-     * 로컬 테스트용 역할 — {@code -Dinstantp2p.debug.dev=<uuid,...>}, {@code .supporter}, {@code .streamer}.
-     * 시그널링 서버 목록에 더해진다(이 서버 안에서만: 정원 초과 입장·expel 등급·room_state 배지). 배포 설정에는 쓰지 않는다.
-     */
-    private static final Set<UUID> DEBUG_DEV = debugUuids("dev");
-    private static final Set<UUID> DEBUG_SUPPORTER = debugUuids("supporter");
-    private static final Set<UUID> DEBUG_STREAMER = debugUuids("streamer");
-
-    private static volatile Set<UUID> dev = DEBUG_DEV;
-    private static volatile Set<UUID> supporter = DEBUG_SUPPORTER;
-    private static volatile Set<UUID> streamer = DEBUG_STREAMER;
+    private static volatile Set<UUID> dev = Set.of();
+    private static volatile Set<UUID> supporter = Set.of();
+    private static volatile Set<UUID> streamer = Set.of();
 
     private static final HttpClient CLIENT = HttpClient.newBuilder()
             .connectTimeout(HTTP_TIMEOUT)
@@ -143,9 +135,9 @@ public final class Roles {
             return false;
         }
         if (o == null) return false;
-        Set<UUID> newDev = union(parseUuids(o, "dev"), DEBUG_DEV);
-        Set<UUID> newSupporter = union(parseUuids(o, "supporter"), DEBUG_SUPPORTER);
-        Set<UUID> newStreamer = union(parseUuids(o, "streamer"), DEBUG_STREAMER);
+        Set<UUID> newDev = parseUuids(o, "dev");
+        Set<UUID> newSupporter = parseUuids(o, "supporter");
+        Set<UUID> newStreamer = parseUuids(o, "streamer");
         boolean changed = !newDev.equals(dev) || !newSupporter.equals(supporter) || !newStreamer.equals(streamer);
         dev = newDev;
         supporter = newSupporter;
@@ -180,30 +172,6 @@ public final class Roles {
             LOGGER.warn("[roles] signature verification error: {}", e.getMessage());
             return false;
         }
-    }
-
-    private static Set<UUID> union(Set<UUID> a, Set<UUID> b) {
-        if (b.isEmpty()) return a;
-        Set<UUID> out = new HashSet<>(a);
-        out.addAll(b);
-        return Set.copyOf(out);
-    }
-
-    private static Set<UUID> debugUuids(String role) {
-        String prop = System.getProperty("instantp2p.debug." + role, "");
-        Set<UUID> out = new HashSet<>();
-        for (String part : prop.split(",")) {
-            if (part.isBlank()) continue;
-            try {
-                out.add(UUID.fromString(part.trim()));
-            } catch (IllegalArgumentException e) {
-                LOGGER.warn("[roles] instantp2p.debug.{}: 잘못된 UUID {}", role, part.trim());
-            }
-        }
-        if (!out.isEmpty()) {
-            LOGGER.warn("[roles] 테스트용 {} 역할 {}명 추가됨 (instantp2p.debug.{}) — 배포 서버에서는 빼세요", role, out.size(), role);
-        }
-        return Set.copyOf(out);
     }
 
     private static Set<UUID> parseUuids(JsonObject o, String key) {

@@ -184,7 +184,6 @@ v1_21=intermediary·v26=Mojang 이름을 검사한다.
   Paper는 `PlayerServerFullCheckEvent`(주소 없음 → `AsyncPlayerPreLoginEvent`에서 터널 접속 UUID를 기록해 둔다), Spigot은 `PlayerLoginEvent` KICK_FULL.
   **Paper에서 `PlayerLoginEvent`를 듣지 말 것**(deprecated, 플레이어가 일찍 생성되고 경고). Velocity는 프록시에 정원 검사가 없고 백엔드가 막는다.
   Fabric은 Mixin(아래 Fabric 절).
-- 테스트용 역할: `-Dinstantp2p.debug.dev|supporter|streamer=<uuid,...>`를 JVM 옵션으로 주면 시그널링 목록에 더한다(그 서버 안에서만, 기동 시 WARN).
 - 퇴장 이벤트 시점에는 나가는 플레이어가 아직 온라인 목록에 있음 → `room_state`/인원수는 다음 틱에.
   Fabric 1.21.11은 `DISCONNECT`가 Netty 스레드에서 올 때가 있다 → 퇴장 처리 전체를 `runSync`로 서버 스레드에 넘긴다.
   **Fabric `server.execute()`는 서버 스레드에서 부르면 즉시 실행된다** — 다른 스레드를 한 번 거쳐 `execute`(`FabricPlatform.runSync`).
