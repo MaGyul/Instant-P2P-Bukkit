@@ -41,7 +41,7 @@ val universalJar by tasks.registering(Jar::class) {
         include("dev/magyul/instantp2p/fabric/**", "fabric.mod.json", "instant-p2p-server.mixins.json")
     }
 
-    // 이 프로젝트(CC0)와 함께 넣은 라이브러리(kwik·agent15 LGPL-3.0, hkdf Apache-2.0, siphash MIT)의 라이선스·고지
+    // 이 프로젝트(MIT)와 함께 넣은 라이브러리(kwik·agent15 LGPL-3.0, hkdf Apache-2.0, siphash MIT)의 라이선스·고지
     from(rootProject.file("LICENSE")) { into("META-INF") }
     from(rootProject.file("licenses")) { into("META-INF/licenses") }
 
