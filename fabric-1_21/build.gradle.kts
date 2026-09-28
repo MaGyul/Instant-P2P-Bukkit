@@ -76,7 +76,7 @@ tasks {
         archiveClassifier = ""
         from(remapJar.flatMap { it.archiveFile }.map { archives.zipTree(it) })
         from(v26.elements.map { files -> files.map { archives.zipTree(it.asFile) } }) {
-            include("dev/magyul/instantp2p/fabric/v26/**")
+            include("dev/magyul/instantp2p/fabric/v26/**", "dev/magyul/instantp2p/fabric/mixin/v26/**")
         }
         duplicatesStrategy = DuplicatesStrategy.FAIL
     }

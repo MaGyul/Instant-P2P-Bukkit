@@ -11,4 +11,7 @@ dependencies {
     compileOnly("net.fabricmc:fabric-loader:$fabricLoaderVersion")
     compileOnly("org.slf4j:slf4j-api:2.0.9")
     compileOnly("com.google.code.gson:gson:2.10.1")
+    // MixinPlugin(버전별 Mixin 선택) — 런타임은 Fabric Loader가 제공
+    compileOnly("net.fabricmc:sponge-mixin:0.17.4+mixin.0.8.7")
+    compileOnly("org.ow2.asm:asm-tree:9.8")
 }

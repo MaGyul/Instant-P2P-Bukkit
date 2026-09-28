@@ -134,6 +134,12 @@ public class TunnelRegistry {
                 .findFirst();
     }
 
+    /** 이 주소(포트 무관)로 보이는 터널이 있는지 — 포트를 모르는 로그인 이벤트용. */
+    public boolean hasPeerAddress(InetAddress addr) {
+        if (addr == null) return false;
+        return byLocal.values().stream().anyMatch(t -> t.peerAddress.equals(addr));
+    }
+
     public int size() {
         return byLocal.size();
     }

@@ -72,7 +72,7 @@ Velocity만 `minecraftVersion`(비우면 첫 백엔드에 ping해서 정함)이 
 
 ### IP 복원 (Mixin 대체)
 
-단일 jar로 여러 로더와 MC 버전을 받아야 해서 Mixin은 쓰지 않습니다.
+단일 jar로 여러 로더와 MC 버전을 받아야 해서 IP 복원에는 Mixin을 쓰지 않습니다(Fabric 정원 초과 입장만 Mixin, 아래 참고).
 
 - **Paper / Spigot / Fabric:** 서버 리스닝 채널 파이프라인 맨 앞에 핸들러를 넣고, accept된 연결의 첫 read(handshake 처리 전)에서 `Connection`의 주소 필드를 교체합니다.
   - MC 내부는 **이름이 아니라 타입으로** 찾습니다. `List<ChannelFuture>` 필드를 가진 객체, `packet_handler`의 `SocketAddress` 필드입니다. 그래서 Mojang 매핑, Spigot, Fabric intermediary, 26.x 모두 같은 코드로 됩니다.
@@ -98,6 +98,7 @@ QUIC 연결의 실제 UDP 출발 주소를 씁니다.
 - **오프라인 expel:** 클라이언트는 접속할 때마다 자기 차단 목록 전체를 다시 보냅니다. 오프라인 대상도 holders에 기록해야 차단자가 있는 동안 입장이 막힙니다.
 - **Roles 갱신:** 폴링하지 않습니다. 호스트 시작 시 한 번, 로그인 때 쿨다운 60초로 비동기 갱신하고, 바뀌면 `room_state`를 다시 보냅니다.
 - **퇴장 시 갱신:** 퇴장 이벤트 시점에는 나가는 플레이어가 아직 온라인 목록에 있어서, `room_state`와 공개 방 인원수는 다음 틱에 보냅니다.
+- **정원 초과 입장:** 서버가 가득 차도 초대 코드·공개 방으로 들어온 개발자·서포터는 받습니다(원본과 같음, 들어온 뒤엔 한 자리를 차지). 서버 주소로 직접 접속한 경우는 해당하지 않습니다. Paper/Spigot은 이벤트로, Fabric은 바닐라 정원 검사 직전에 거는 Mixin 하나로 합니다(Velocity는 백엔드가 정원을 막음).
 - **입장 suffix:** Paper/Spigot은 입장 이벤트에서 붙입니다. Fabric은 바닐라 입장 메시지를 가로채 붙입니다. Velocity는 백엔드가 입장 메시지를 보내서 붙이지 못합니다.
 
 ### 번역

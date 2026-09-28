@@ -10,6 +10,7 @@
   "entrypoints": {
     "server": ["dev.magyul.instantp2p.fabric.FabricEntry"]
   },
+  "mixins": ["instant-p2p-server.mixins.json"],
   "depends": {
     "fabricloader": ">=0.16.0",
     "minecraft": ">=1.21",

@@ -6,6 +6,7 @@ import dev.magyul.instantp2p.common.core.JsonSettings;
 import dev.magyul.instantp2p.common.core.P2PSettings;
 import dev.magyul.instantp2p.common.tunnel.TunnelInjector;
 import dev.magyul.instantp2p.fabric.FabricEntry;
+import dev.magyul.instantp2p.fabric.PlayerLimitBypass;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerConfigurationConnectionEvents;
@@ -19,6 +20,7 @@ import net.minecraft.server.level.ServerPlayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.UUID;
@@ -75,6 +77,15 @@ public final class FabricImpl implements FabricEntry.Impl {
 
         ServerLifecycleEvents.SERVER_STARTED.register(this::onStarted);
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> onStopping());
+
+        // 정원 초과 입장: 터널로 들어온 개발자·서포터 (Mixin이 바닐라 정원 검사 직전에 부른다)
+        PlayerLimitBypass.set((address, profile) -> {
+            UUID id = Profiles.id(profile);
+            boolean ok = id != null && address instanceof InetSocketAddress isa
+                    && core.canBypassPlayerLimit(id, isa.getAddress());
+            if (ok) LOGGER.info("[host] 정원 초과 입장 허용: {} (개발자·서포터)", id);
+            return ok;
+        });
 
         // 로그인 전 검사: 추방 상태면 설정 단계에서 끊는다 (월드에 들어오기 전)
         ServerConfigurationConnectionEvents.CONFIGURE.register((handler, server) -> {
@@ -138,6 +149,7 @@ public final class FabricImpl implements FabricEntry.Impl {
     }
 
     private void onStopping() {
+        PlayerLimitBypass.set(null);
         TunnelInjector.uninject();
         core.tunnels().clear();
         core.bridge().stopHost();

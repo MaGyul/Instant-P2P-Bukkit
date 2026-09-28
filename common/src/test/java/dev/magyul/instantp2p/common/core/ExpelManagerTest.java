@@ -8,6 +8,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -139,6 +141,29 @@ class ExpelManagerTest {
         platform.names = false;
         expel.handleRequest(DEV, Moderation.ACTION_KICK, NOBODY);
         assertEquals(List.of(NOBODY + ":instant-p2p.msg.kicked_by:[?]"), platform.kicks);
+    }
+
+    @Test
+    void bypassPlayerLimitOnlyForPerkRolesViaTunnel() throws Exception {
+        P2PCore core = new P2PCore(platform);
+        core.tunnels().register(new InetSocketAddress("127.0.0.1", 50000), "203.0.113.7", "sid");
+        InetAddress tunnel = InetAddress.getByAddress(new byte[]{(byte) 203, 0, 113, 7});
+        InetAddress direct = InetAddress.getByAddress(new byte[]{(byte) 198, 51, 100, 1});
+
+        for (UUID id : List.of(DEV, SUPPORTER, STREAMER, NOBODY)) core.noteTunnelLogin(id, tunnel);
+        assertTrue(core.canBypassPlayerLimit(DEV));
+        assertTrue(core.canBypassPlayerLimit(SUPPORTER));
+        assertFalse(core.canBypassPlayerLimit(STREAMER));
+        assertFalse(core.canBypassPlayerLimit(NOBODY));
+
+        // 서버 주소로 직접 들어온 경우는 해당 없음
+        core.noteTunnelLogin(DEV, direct);
+        assertFalse(core.canBypassPlayerLimit(DEV));
+        assertFalse(core.canBypassPlayerLimit(OTHER));
+
+        // 입장하면 기록을 지운다
+        core.onJoin(SUPPORTER);
+        assertFalse(core.canBypassPlayerLimit(SUPPORTER));
     }
 
     private static final class FakePlatform implements P2PPlatform {

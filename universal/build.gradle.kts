@@ -38,7 +38,7 @@ val universalJar by tasks.registering(Jar::class) {
     }
     // 1.21.x(intermediary로 remap)와 26.x(Mojang 이름) 구현, 버전을 보고 고르는 진입점
     from(fabricFiles.map { files -> files.map { archives.zipTree(it.asFile) } }) {
-        include("dev/magyul/instantp2p/fabric/**", "fabric.mod.json")
+        include("dev/magyul/instantp2p/fabric/**", "fabric.mod.json", "instant-p2p-server.mixins.json")
     }
 
     // MC 내부를 이름으로 참조하지 않으므로 Paper의 플러그인 리매핑이 필요 없다 (다른 로더는 무시)
@@ -57,12 +57,14 @@ val checkUniversalJar by tasks.registering {
             val problems = mutableListOf<String>()
 
             listOf(
-                "plugin.yml", "velocity-plugin.json", "fabric.mod.json",
+                "plugin.yml", "velocity-plugin.json", "fabric.mod.json", "instant-p2p-server.mixins.json",
                 "dev/magyul/instantp2p/paper/PaperEntry.class",
                 "dev/magyul/instantp2p/velocity/VelocityEntry.class",
                 "dev/magyul/instantp2p/fabric/FabricEntry.class",
                 "dev/magyul/instantp2p/fabric/v1_21/FabricImpl.class",
                 "dev/magyul/instantp2p/fabric/v26/FabricImpl.class",
+                "dev/magyul/instantp2p/fabric/mixin/v1_21/PlayerListMixin.class",
+                "dev/magyul/instantp2p/fabric/mixin/v26/PlayerListMixin.class",
                 // QUIC — relocate된 이름으로 들어 있어야 한다
                 "dev/magyul/instantp2p/libs/kwik/core/QuicConnection.class",
                 "dev/magyul/instantp2p/libs/kwik/core/version.properties",

@@ -1,5 +1,6 @@
 package dev.magyul.instantp2p.common.core;
 
+import dev.magyul.instantp2p.common.DevBadge;
 import dev.magyul.instantp2p.common.network.PacketByteBuf;
 import dev.magyul.instantp2p.common.network.packet.Moderation;
 import dev.magyul.instantp2p.common.network.packet.RoomState;
@@ -8,6 +9,7 @@ import dev.magyul.instantp2p.common.core.ExpelManager;
 import dev.magyul.instantp2p.common.signaling.Roles;
 import dev.magyul.instantp2p.common.core.P2PBridge;
 
+import java.net.InetAddress;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,12 +29,17 @@ public final class P2PCore {
     /** IP 복원(TunnelInjector)을 못 하게 됐을 때 관리자에게 보내는 번역 키 */
     public static final String IP_RESTORE_UNAVAILABLE = "instant-p2p.msg.ip_restore_unavailable";
 
+    /** 로그인 전 검사와 정원 검사 사이 간격의 상한 — 넘으면 터널 접속 기록을 버린다. */
+    private static final long TUNNEL_LOGIN_TTL_MS = 60_000;
+
     private final P2PPlatform platform;
     private final TunnelRegistry tunnels = new TunnelRegistry();
     private final Set<UUID> onlinePlayers = ConcurrentHashMap.newKeySet();
     private final ExpelManager expel;
     private final P2PBridge bridge;
     private volatile boolean ipRestoreUnavailable;
+    /** 터널로 로그인 중인 UUID → 기록 시각. 정원 검사 이벤트에 주소가 없는 플랫폼(Paper)이 쓴다. */
+    private final Map<UUID, Long> tunnelLogins = new ConcurrentHashMap<>();
 
     public P2PCore(P2PPlatform platform) {
         this.platform = platform;
@@ -70,8 +77,41 @@ public final class P2PCore {
         return !expel.isExpelled(player);
     }
 
+    /** {@link #onPreLogin(UUID)} + 접속 주소가 터널이면 기록해 둔다({@link #canBypassPlayerLimit}용). */
+    public boolean onPreLogin(UUID player, InetAddress address) {
+        noteTunnelLogin(player, address);
+        return onPreLogin(player);
+    }
+
+    /** 테스트용으로 분리 (역할 갱신 네트워크 호출 없이) */
+    void noteTunnelLogin(UUID player, InetAddress address) {
+        long now = System.currentTimeMillis();
+        tunnelLogins.values().removeIf(at -> now - at > TUNNEL_LOGIN_TTL_MS);
+        if (address != null && tunnels.hasPeerAddress(address)) {
+            tunnelLogins.put(player, now);
+        } else {
+            tunnelLogins.remove(player);
+        }
+    }
+
+    /**
+     * 서버가 가득 찼을 때 들여보낼지 — 터널로 들어온 개발자·서포터(원본 {@code canBypassPlayerLimit}, {@link DevBadge#hasPerk}).
+     * 들어온 뒤엔 한 자리를 그대로 차지한다(인원 수에서 빼지 않음). 서버 주소로 직접 접속한 경우는 해당하지 않는다.
+     * 먼저 {@link #onPreLogin(UUID, InetAddress)}가 불려 있어야 한다.
+     */
+    public boolean canBypassPlayerLimit(UUID player, InetAddress address) {
+        return address != null && tunnels.hasPeerAddress(address) && DevBadge.hasPerk(player);
+    }
+
+    /** 정원 검사에 주소가 없는 플랫폼(Paper)용 — {@link #onPreLogin(UUID, InetAddress)}에서 기록한 값을 쓴다. */
+    public boolean canBypassPlayerLimit(UUID player) {
+        Long at = tunnelLogins.get(player);
+        return at != null && System.currentTimeMillis() - at <= TUNNEL_LOGIN_TTL_MS && DevBadge.hasPerk(player);
+    }
+
     /** 서버 스레드. 입장 완료. */
     public void onJoin(UUID player) {
+        tunnelLogins.remove(player);
         onlinePlayers.add(player);
         broadcastRoomState();
         bridge.updatePublicRoomPlayerCount(onlinePlayers.size(), platform.maxPlayers());

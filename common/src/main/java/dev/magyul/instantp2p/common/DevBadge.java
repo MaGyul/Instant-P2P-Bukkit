@@ -10,7 +10,7 @@ import java.util.UUID;
  */
 public final class DevBadge {
 
-    /** 특혜(방 정원 무시) 스위치. 인원 수에서 빼주지는 않는다(원본과 같음). 서버 쪽 정원 무시 입장은 아직 미구현. */
+    /** 특혜(방 정원 무시) 스위치. 인원 수에서 빼주지는 않는다(원본과 같음). 서버 쪽 적용은 {@code P2PCore.canBypassPlayerLimit}. */
     public static final boolean PERKS_ENABLED = true;
 
     private DevBadge() {}

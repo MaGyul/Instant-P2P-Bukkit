@@ -24,19 +24,30 @@ public final class FabricEntry implements DedicatedServerModInitializer {
     private static final String IMPL_1_21 = "dev.magyul.instantp2p.fabric.v1_21.FabricImpl";
     private static final String IMPL_26 = "dev.magyul.instantp2p.fabric.v26.FabricImpl";
 
-    @Override
-    public void onInitializeServer() {
-        String version = FabricLoader.getInstance().getModContainer("minecraft")
+    /** 런타임 MC 버전 (알 수 없으면 null) */
+    static String minecraftVersion() {
+        return FabricLoader.getInstance().getModContainer("minecraft")
                 .map(c -> c.getMetadata().getVersion().getFriendlyString())
                 .orElse(null);
+    }
 
-        if (!MinecraftVersions.atLeast(version, 1, 21)) {
+    /** 버전에 맞는 구현 패키지 이름({@code v1_21}/{@code v26}), 지원하지 않는 버전이면 null. {@link MixinPlugin}도 같은 기준을 쓴다. */
+    static String implPackage(String version) {
+        if (!MinecraftVersions.atLeast(version, 1, 21)) return null;
+        return MinecraftVersions.atLeast(version, 26) ? "v26" : "v1_21";
+    }
+
+    @Override
+    public void onInitializeServer() {
+        String version = minecraftVersion();
+        String pkg = implPackage(version);
+        if (pkg == null) {
             LOGGER.warn("MC {}는 지원하지 않습니다 (1.21 이상 필요). instant-p2p가 비활성화됩니다.", version);
             return;
         }
 
         try {
-            String implClass = MinecraftVersions.atLeast(version, 26) ? IMPL_26 : IMPL_1_21;
+            String implClass = "v26".equals(pkg) ? IMPL_26 : IMPL_1_21;
             Impl impl = (Impl) Class.forName(implClass).getDeclaredConstructor().newInstance();
             impl.init();
         } catch (ReflectiveOperationException | LinkageError e) {

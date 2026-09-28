@@ -66,6 +66,7 @@ public final class PaperEntry extends JavaPlugin {
         P2PNet.register(this, core);
 
         Bukkit.getPluginManager().registerEvents(new InstantP2pListener(core, text), this);
+        FullCheckListener.register(this, core);
 
         // 버킷이 완전히 켜진 후 스캐줄이 돌아가므로 버킷이 켜지고 안정화가 시작될때 P2P 서비스를 시작한다.
         Bukkit.getScheduler().runTask(this, () -> {

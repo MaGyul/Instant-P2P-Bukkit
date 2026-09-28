@@ -59,6 +59,11 @@ MC 버전은 `Bukkit.getBukkitVersion()`(`getMinecraftVersion()`은 Paper 전용
 - 입장 suffix: `ServerPlayConnectionEvents.INIT`(입장 메시지보다 먼저)에서 준비, `ServerMessageEvents.ALLOW_GAME_MESSAGE`에서 `multiplayer.player.joined`를 가로채 붙인다.
   바닐라는 입장 메시지를 플레이어를 목록에 넣기 전에 보내서 입장한 본인은 자기 입장 메시지를 못 본다(Paper는 보임).
 - Loom 1.18+는 Gradle을 Java 25로 돌려야 한다 → JDK 25 설치 필요.
+- **Mixin은 정원 초과 입장 하나뿐**(`mixin.v1_21/v26.PlayerListMixin`, `PlayerList.canPlayerLogin`에서 `canBypassPlayerLimit` 호출 직전 → null 반환 = 허용).
+  설정(`instant-p2p-server.mixins.json`)의 목록은 비워 두고 `MixinPlugin.getMixins()`가 MC 버전으로 하나만 등록한다(`FabricEntry.implPackage`와 같은 기준).
+  1.21.x판은 intermediary 문자열(`class_3324`/`method_14586`/`method_14609`, 1.21.0~1.21.11 공통) + `remap = false` — refmap은 디스크립터까지 고정하는데
+  1.21.9에 인자가 GameProfile → NameAndId로 바뀌어서 쓸 수 없다. 인자는 `@Coerce Object`. 판정은 MC 타입 없는 `PlayerLimitBypass`를 거쳐 구현이 넣는다.
+  Mixin 패키지(`dev.magyul.instantp2p.fabric.mixin`)에는 Mixin 외 클래스를 두지 말 것(Mixin이 그 패키지의 일반 로드를 막는다).
 
 ### `velocity` (`dev.magyul.instantp2p.velocity`) — 3.x·4.x 공통, velocity-api 3.4.0에 맞춰 컴파일
 - IP 복원: `ConnectionManager`(VelocityServer의 getter 없는 private 필드 — 타입으로 찾음)의 `getServerChannelInitializer()`를 감싸 자식 채널 맨 앞에 핸들러를 붙이고,
@@ -135,6 +140,11 @@ v1_21=intermediary·v26=Mojang 이름을 검사한다.
 - 우선순위: 무등급 0, 방송인 1(readmit 외엔 `allowBroadcast` 필요), 서포터 2, 개발자 3, 호스트 4. `sender > target`일 때만 실행, 호스트는 expel/kick 대상 아님.
 - 모드 클라이언트는 roles.json에 역할이 있는 계정만 moderation 패킷을 보낸다 — op/호스트 권한자는 모드 UI로 추방 못 함.
 - Roles는 **폴링 금지**(원본 개발자 요청). 호스트 시작 시 1회 + 로그인 시 쿨다운 60초, 비동기. 바뀌면 `room_state` 재전송.
+- 정원 초과 입장: 터널로 들어온 개발자·서포터만(`P2PCore.canBypassPlayerLimit`), 들어온 뒤엔 한 자리를 차지한다.
+  Paper는 `PlayerServerFullCheckEvent`(주소 없음 → `AsyncPlayerPreLoginEvent`에서 터널 접속 UUID를 기록해 둔다), Spigot은 `PlayerLoginEvent` KICK_FULL.
+  **Paper에서 `PlayerLoginEvent`를 듣지 말 것**(deprecated, 플레이어가 일찍 생성되고 경고). Velocity는 프록시에 정원 검사가 없고 백엔드가 막는다.
+  Fabric은 Mixin(아래 Fabric 절).
+- 테스트용 역할: `-Dinstantp2p.debug.dev|supporter|streamer=<uuid,...>`를 JVM 옵션으로 주면 시그널링 목록에 더한다(그 서버 안에서만, 기동 시 WARN).
 - 퇴장 이벤트 시점에는 나가는 플레이어가 아직 온라인 목록에 있음 → `room_state`/인원수는 다음 틱에.
   **Fabric `server.execute()`는 서버 스레드에서 부르면 즉시 실행된다** — `server.schedule(server.wrapRunnable(task))`.
 - members probe는 worker 스레드에서 돌므로 플랫폼 온라인 목록 대신 `P2PCore`가 이벤트로 관리하는 UUID 집합을 쓴다.
@@ -145,7 +155,6 @@ v1_21=intermediary·v26=Mojang 이름을 검사한다.
 - **공개 방 등록 인증:** 모드 1.3은 announce URL에 Mojang 계정 토큰(`MojangAuth`)을 붙인다. 시그널링 서버가 인증을 켜면(`/api/v1/auth/challenge`가 503이 아니게 되면)
   전용 서버는 공개 방을 못 올린다 — 서버용 인증 방식을 원본 개발자와 논의.
 - relay 사용을 끄거나 제한하는 설정 (원본 개발자 인프라 부담 완화용).
-- 인원 초과 시 dev 입장 허용(원본 `canBypassPlayerLimit`)은 미구현.
 
 ## 테스트 체크리스트 (플랫폼마다)
 
