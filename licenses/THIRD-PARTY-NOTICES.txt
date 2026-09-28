@@ -1,7 +1,7 @@
 instant-p2p server (instant-p2p 서버 통합판)
 ==========================================
 
-This project itself is released under CC0 1.0 Universal (see LICENSE).
+This project itself is released under the MIT License (see LICENSE).
 It is based on instant-p2p by KITE2459 (CC0 1.0) — https://github.com/KITE2459/kfcudp-instant-p2p
 
 The distributed jar bundles the following third-party libraries.
