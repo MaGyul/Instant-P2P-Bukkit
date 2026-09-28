@@ -59,17 +59,12 @@ public final class VillasMsg {
         return json.contains("\"" + key + "\"");
     }
 
-    /** control.peers 배열 → [name, remote(연결 안 됐으면 null)] 목록 */
-    public static List<String[]> peers(String json) {
-        return peerObjects(json, "peers");
-    }
-
-    /** delta.joined 배열 → [name, remote] 목록 — peers()와 같은 모양(Peer 객체 배열)이라 키만 다르다. */
+    /** delta.joined 배열 → [name, remote] 목록 (공개 방 로비) */
     static List<String[]> joined(String json) {
         return peerObjects(json, "joined");
     }
 
-    /** {key: [ {..}, {..} ]} 형태의 오브젝트 배열 → [name, remote] 목록. peers/joined가 공유. */
+    /** {key: [ {..}, {..} ]} 형태의 오브젝트 배열 → [name, remote] 목록. */
     private static List<String[]> peerObjects(String json, String key) {
         List<String[]> out = new ArrayList<>();
         int k = json.indexOf("\"" + key + "\"");

@@ -2,11 +2,10 @@ package dev.magyul.instantp2p.common.quic;
 
 import dev.magyul.instantp2p.common.Utils;
 import dev.magyul.instantp2p.common.core.P2PCore;
-import dev.magyul.instantp2p.common.tunnel.TunnelRegistry;
 import dev.magyul.instantp2p.common.signaling.P2PConfig;
-import dev.magyul.instantp2p.common.signaling.PeerNames;
 import dev.magyul.instantp2p.common.signaling.VillasMsg;
 import dev.magyul.instantp2p.common.signaling.WebSocketClient;
+import dev.magyul.instantp2p.common.tunnel.TunnelRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tech.kwik.core.QuicConnection;
@@ -24,8 +23,10 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Inet4Address;
 import java.net.InetSocketAddress;
-import java.net.SocketException;
 import java.net.Socket;
+import java.net.SocketException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -33,20 +34,23 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * QUIC 호스트 (원본 모드 1.3의 QuicHost를 서버용으로 옮김). 시그널링은 VILLAS relay를 그대로 쓴다.
+ * QUIC 호스트 (원본 모드 1.4의 QuicHost를 서버용으로 옮김).
  * <ol>
  *   <li>UDP 소켓 하나({@link QuicIce})로 host/srflx/relay 후보를 모으고, 그 소켓 위에 kwik QUIC 서버를 띄운다.
  *       인증서는 실행마다 새로 만드는 자체 서명 — 조인자는 시그널링으로 받은 지문으로 확인한다.</li>
- *   <li>로비 {@code /{roomId}/h{4자리 숫자}}에 상주하다 조인 알림({@code j{d|r}{sid}})을 보면
- *       페어 방 {@code /{roomId}-{sid}/h{sid}}에 붙어 지문({@code quic-answer})과 후보를 보내고, 받은 후보로 펀칭한다.</li>
+ *   <li>랑데부 서버에 방장으로 붙는다({@code /rv/{roomId}/host?key&token}). 조인자가 오면 서버가 sid를 정해 {@code join}으로
+ *       알려 주고, 그 조인자와의 메시지는 sid를 붙여 오간다(다른 조인자는 보지도 끼어들지도 못한다).
+ *       지문({@code quic-answer})과 후보를 보내고, 받은 후보로 펀칭한다.</li>
  *   <li>조인자는 QUIC 연결 하나를 맺고 MC 접속마다 스트림을 연다. 스트림 하나 = 로컬 MC 서버로의 TCP 하나.</li>
  * </ol>
- * 접속자 주소는 QUIC 연결의 실제 UDP 출발 주소다({@link #peerKey}).
+ * 방장 연결에는 시그널링 게시 토큰이 필요하다({@code HostAccount}). 접속자 주소는 QUIC 연결의 실제 UDP 출발 주소다({@link #peerKey}).
  */
 public final class QuicHost {
 
@@ -54,17 +58,28 @@ public final class QuicHost {
 
     static final String ALPN = "instant-p2p";
     static final String MSG_ANSWER = "quic-answer";
+    /** 중계 강제인데 중계 계정이 없다 — 알릴 후보가 없으니 조인자가 30초 기다리지 않게 바로 알린다. */
+    static final String MSG_NO_RELAY = "quic-no-relay";
     private static final int DIAL_TIMEOUT_MS = 5_000;
+    /** 조인자의 2단계 시도(직결 2초 + 중계 30초)보다 길어야 방장이 먼저 포기하지 않는다. */
     private static final long PUNCH_MS = 35_000L;
     private static final long INITIAL_BACKOFF_MS = 1_000L;
     private static final long MAX_BACKOFF_MS = 30_000L;
     private static final int PIPE_BUF = 65_536;
+    /** 동시에 진행하는 접속 협상 수 상한 — 가짜 접속으로 체크 패킷을 증폭시키지 못하게(원본과 같음). */
+    private static final int MAX_NEGOTIATIONS = 4;
 
     private final P2PCore core;
     private final TunnelRegistry tunnels;
     private final String roomId;
     private final String targetHost;
     private final int targetPort;
+    /**
+     * 랑데부 서버에서 이 방 코드를 잡아 두는 비밀. 잠깐 끊겼다 다시 붙어도 같은 key여야 방을 되찾는다
+     * — 코드만 아는 남이 그 사이 방장 자리를 가로채지 못하게. 원본은 방마다 새로 만들지만 서버판은 코드를 유지하므로
+     * key도 코드와 함께 저장해 둔 값을 받는다(바뀌면 서버가 이전 key로 잡아 둔 동안 409).
+     */
+    private final String hostKey;
 
     private final AtomicBoolean running = new AtomicBoolean(false);
     private volatile ServerConnector server;
@@ -78,23 +93,29 @@ public final class QuicHost {
     private volatile int consecutiveFailures = 0;
 
     private final Set<QuicConnection> live = ConcurrentHashMap.newKeySet();
-    private final Map<String, Long> handled = new ConcurrentHashMap<>();
+    /** 협상 중인 조인자(sid) → 그 조인자가 보낸 후보 */
+    private final Map<String, List<QuicIce.Candidate>> joiners = new ConcurrentHashMap<>();
+    /** sid → 진행 중인 협상. 조인자가 떠나면(leave) 끊어 협상 자리를 돌려준다. */
+    private final Map<String, Future<?>> negotiations = new ConcurrentHashMap<>();
+    private final Semaphore negotiating = new Semaphore(MAX_NEGOTIATIONS);
     private final ExecutorService worker = Executors.newCachedThreadPool(r -> {
         Thread t = new Thread(r, "quic-host-worker");
         t.setDaemon(true);
         return t;
     });
 
-    public QuicHost(P2PCore core, String roomId, String target) {
+    public QuicHost(P2PCore core, String roomId, String hostKey, String target) {
         this.core = core;
         this.tunnels = core.tunnels();
         this.roomId = roomId;
+        this.hostKey = hostKey;
         int colon = target.lastIndexOf(':');
         if (colon < 0) throw new IllegalArgumentException("invalid target: " + target);
         this.targetHost = target.substring(0, colon);
         this.targetPort = Integer.parseInt(target.substring(colon + 1));
     }
 
+    /** 「중계 통신 강제」 — 조인자를 맞이할 때마다 읽는다(원본 relayOnlyNow). */
     private boolean relayOnly() {
         return core.settings().relayOnly();
     }
@@ -110,9 +131,10 @@ public final class QuicHost {
         QuicCert.Identity id = QuicCert.generate();
         fingerprint = id.fingerprint();
 
+        // 소켓 전체를 막는 relayOnly는 끈다 — 중계 여부는 조인자마다 그 순간 설정으로 정한다(원본과 같음)
         QuicIce agent = openIce(core.settings().udpPort());
         ice = agent;
-        // TURN 계정은 방장 계정 인증으로 받는다(1.4). 못 받으면 중계 없이(직결만) 간다.
+        // TURN 계정은 방장 계정 인증으로 받는다. 못 받으면 중계 없이(직결만) 간다.
         String[] turn = core.account().turnCredentials();
         if (turn != null) {
             agent.enableTurn(P2PConfig.TURN_URL, turn[0], turn[1]);
@@ -130,7 +152,7 @@ public final class QuicHost {
         server.registerApplicationProtocol(ALPN, new TunnelFactory());
         server.start();
         LOG.info("[quic-host] listening room={} udpPort={} target={}:{}", roomId, agent.localPort(), targetHost, targetPort);
-        worker.execute(this::connectLobby);
+        worker.execute(this::openLobby);
     }
 
     public void close() {
@@ -138,6 +160,8 @@ public final class QuicHost {
         long t0 = System.currentTimeMillis();
         WebSocketClient l = lobby;
         if (l != null) l.close();
+        for (Future<?> f : negotiations.values()) f.cancel(true);
+        // 연결을 먼저 우리가 닫는다 — server.close()의 종료 대기가 기다릴 대상이 없게
         for (QuicConnection c : live) {
             try { c.close(); } catch (Exception ignored) {}
         }
@@ -156,12 +180,12 @@ public final class QuicHost {
     private QuicIce openIce(int port) throws SocketException {
         if (port != 0) {
             try {
-                return new QuicIce(P2PConfig.STUN_URL, relayOnly(), port);
+                return new QuicIce(P2PConfig.STUN_URL, false, port);
             } catch (SocketException e) {
                 LOG.warn("[quic-host] UDP {} 포트를 열 수 없다({}) — 임의 포트로 연다", port, e.getMessage());
             }
         }
-        return new QuicIce(P2PConfig.STUN_URL, relayOnly(), 0);
+        return new QuicIce(P2PConfig.STUN_URL, false, 0);
     }
 
     private static void preload(Class<?>... classes) {
@@ -173,25 +197,27 @@ public final class QuicHost {
         }
     }
 
-    // ── 로비 (조인 감지) ──────────────────────────────────────────────────────
+    // ── 랑데부: 서버가 맺어 주는 조인자 ────────────────────────────────────────
 
-    private void connectLobby() {
+    private void openLobby() {
         if (!running.get()) return;
-        // 로비 이름은 접속마다 새로 — 서버가 같은 이름의 재접속을 거부한다
-        String peerName = PeerNames.lobbyHost(ThreadLocalRandom.current().nextInt(1000, 10000));
-        WebSocketClient ws = new WebSocketClient(P2PConfig.SIGNALING_URL + "/" + roomId + "/" + peerName) {
+        // 토큰은 붙을 때마다 다시 받는다 — 방이 토큰 수명(12시간)보다 오래 열려 있어도 재접속이 막히지 않게
+        // (남은 시간이 넉넉하면 네트워크 없이 그대로 준다)
+        String token = core.account().publishTokenOrNull();
+        String url = P2PConfig.SIGNALING_URL + "/rv/" + roomId + "/host?key=" + hostKey
+                + (token != null ? "&token=" + URLEncoder.encode(token, StandardCharsets.UTF_8) : "");
+        WebSocketClient ws = new WebSocketClient(url) {
             @Override public void onConnected() {
-                send(VillasMsg.hello());
                 backoffMs = INITIAL_BACKOFF_MS;
                 consecutiveFailures = 0;
-                LOG.info("[host] lobby joined: room={}", roomId);
+                LOG.info("[host] rendezvous joined: room={}", roomId);
                 if (signalingDown) {
                     signalingDown = false;
                     core.platform().notifyAdmins("instant-p2p.msg.signaling_recovered");
                 }
             }
             @Override public void onMessage(String type, String json) {
-                handleLobby(json);
+                handleRendezvous(json);
             }
             @Override protected int readIdleTimeoutMs() {
                 return LIVENESS_TIMEOUT_MS;
@@ -204,13 +230,18 @@ public final class QuicHost {
         try {
             ws.connect();
         } catch (Exception e) {
-            LOG.warn("[host] Signaling connect failed: {}", e.toString());
+            // 401 = 토큰 문제(만료·로그아웃·차단). URL은 남기지 않는다(토큰이 들어 있다).
+            LOG.warn("[host] Signaling connect failed: {}", e.getMessage());
             scheduleReconnect();
             return;
         }
         if (!running.get()) ws.close();
     }
 
+    /**
+     * 랑데부가 끊기면 다시 붙는다(같은 key라 방 코드를 되찾는다). 이게 없으면 시그널링이 한 번 끊긴 뒤로
+     * 조인 감지가 영구히 멈춰 방은 열려 있는데 아무도 못 들어오는 상태가 된다.
+     */
     private void scheduleReconnect() {
         if (!running.get()) return;
         consecutiveFailures++;
@@ -228,89 +259,111 @@ public final class QuicHost {
                 } catch (InterruptedException e) {
                     return;
                 }
-                connectLobby();
+                openLobby();
             });
-        } catch (java.util.concurrent.RejectedExecutionException ignored) {}
+        } catch (RejectedExecutionException ignored) {}
     }
 
-    private void handleLobby(String json) {
-        if (!VillasMsg.has(json, "control")) return;
-        long now = System.currentTimeMillis();
-        handled.values().removeIf(t -> now - t > 600_000L);
-
-        for (String[] p : VillasMsg.peers(json)) {
-            String name = p[0], remote = p[1];
-            if (remote == null) continue;
-            PeerNames.Join join = PeerNames.parseJoin(name);
-            if (join == null || handled.putIfAbsent(name, now) != null) continue;
-
-            // "jq" = 입장 전 확인 — 연결하지 않고 접속자 해시만 알려주고 끝낸다
-            if (join.probe()) {
-                worker.execute(() -> sendMembers(join.sid()));
-                continue;
+    /** 서버가 보낸 것: join(새 조인자) / leave(조인자가 떠남) / sid가 붙은 후보. */
+    private void handleRendezvous(String json) {
+        String join = VillasMsg.object(json, "join");
+        if (join != null) {
+            onJoin(join);
+            return;
+        }
+        String leave = VillasMsg.object(json, "leave");
+        if (leave != null) {
+            String sid = VillasMsg.field(leave, "sid");
+            if (sid != null) {
+                joiners.remove(sid);
+                Future<?> f = negotiations.remove(sid);
+                if (f != null) f.cancel(true); // punch는 인터럽트되면 멈춘다
             }
-            // IP는 로그에 남기지 않는다 — 방장이 로그를 공유하면 조인자 IP가 박제된다
-            LOG.info("[host] join detected: sid={} clientRelayForced={}", join.sid(), join.relayForced());
-            worker.execute(() -> negotiate(join.sid(), join.relayForced()));
+            return;
+        }
+        String cand = VillasMsg.object(json, "candidate");
+        String sid = VillasMsg.field(json, "sid");
+        if (cand == null || sid == null) return;
+        List<QuicIce.Candidate> theirs = joiners.get(sid);
+        QuicIce agent = ice;
+        if (theirs == null || agent == null) return;
+        QuicIce.Candidate c = QuicIce.Candidate.parse(VillasMsg.field(cand, "spd"));
+        // 조인자 한 명당 상한 — 넘치는 건 버린다(반사 공격 방지)
+        if (c != null && !theirs.contains(c) && theirs.size() < QuicIce.Candidate.MAX_PER_PEER) {
+            agent.addRemote(c);
+            theirs.add(c);
         }
     }
 
-    /** 입장 전 확인 응답 — 확인하는 쪽이 열어 둔 페어 방에 잠깐 붙어 접속자 해시만 보내고 나간다. */
-    private void sendMembers(String sid) {
-        if (!running.get()) return;
-        WebSocketClient w = new WebSocketClient(P2PConfig.SIGNALING_URL + "/"
-                + PeerNames.pairRoom(roomId, sid) + "/" + PeerNames.probeHost(sid)) {
-            @Override public void onConnected() {
-                send(VillasMsg.hello());
-                send(VillasMsg.description("members", Utils.encodePlayerHashes(core.onlinePlayers(), roomId)));
-            }
-            @Override public void onMessage(String type, String json) {}
-        };
+    private void onJoin(String join) {
+        String sid = VillasMsg.field(join, "sid");
+        // sid는 서버가 만들지만 우리 맵 키로 쓰므로 형식은 확인한다(16 hex)
+        if (sid == null || !sid.matches("[0-9a-f]{16}")) return;
+        // 입장 전 확인 — 연결하지 않고 지금 접속자 해시만 알려주고 끝
+        if ("true".equals(VillasMsg.field(join, "probe"))) {
+            send(sid, VillasMsg.description("members", Utils.encodePlayerHashes(core.onlinePlayers(), roomId)));
+            return;
+        }
+        boolean clientRelayForced = "true".equals(VillasMsg.field(join, "relay"));
+        // IP는 로그에 남기지 않는다 — 방장이 로그를 공유하면 조인자 IP가 박제된다
+        LOG.info("[host] join detected: sid={} clientRelayForced={}", sid, clientRelayForced);
+        if (!negotiating.tryAcquire()) {
+            LOG.warn("[host] 동시 협상이 너무 많다 — sid={} 는 건너뛴다 (조인자가 다시 시도하면 된다)", sid);
+            return;
+        }
+        // 후보 목록은 지금 만든다 — 이 조인자의 후보가 바로 뒤이어 들어온다
+        List<QuicIce.Candidate> theirs = new CopyOnWriteArrayList<>();
+        joiners.put(sid, theirs);
         try {
-            w.connect();
-        } catch (Exception e) {
-            LOG.warn("[host] members reply failed sid={}: {}", sid, e.toString());
+            negotiations.put(sid, worker.submit(() -> {
+                try {
+                    negotiate(sid, clientRelayForced, theirs);
+                } finally {
+                    joiners.remove(sid);
+                    negotiations.remove(sid);
+                    negotiating.release();
+                }
+            }));
+        } catch (RejectedExecutionException e) {
+            joiners.remove(sid);
+            negotiating.release();
         }
-        w.close();
     }
 
-    // ── 조인자별 협상 (지문 + 후보 교환, 펀칭) ─────────────────────────────────
+    /** 이 조인자에게만 간다 — 서버가 sid로 라우팅한다. */
+    private void send(String sid, String msg) {
+        WebSocketClient ws = lobby;
+        if (ws != null) ws.send("{\"sid\":\"" + sid + "\"," + msg.substring(1));
+    }
 
-    private void negotiate(String sid, boolean clientRelayForced) {
+    /**
+     * 지문·후보를 보내고 홀을 뚫는다. {@code theirs}는 이 조인자의 후보만 모인 목록이다 — 소켓과 ICE는
+     * 조인자 전원이 공유하므로 뚫을 때는 반드시 자기 후보로만 판정해야 한다.
+     * <p>
+     * 방장이 중계 강제(relayNow)면 내 트래픽이 내 allocation을 거친다. 조인자가 중계 강제면 내 host 후보만 알리지 않는다
+     * (둘을 묶어 방장까지 중계로 밀면 relay→relay 2홉이 되어 느려진다 — 원본 실측).
+     */
+    private void negotiate(String sid, boolean clientRelayForced, List<QuicIce.Candidate> theirs) {
         QuicIce agent = ice;
         if (agent == null || !running.get()) return;
-        List<QuicIce.Candidate> theirs = new CopyOnWriteArrayList<>();
         boolean relayNow = relayOnly();
-        WebSocketClient pair = null;
+        List<QuicIce.Candidate> mine = QuicIce.advertised(candidates, relayNow, clientRelayForced);
+        if (mine.isEmpty()) {
+            LOG.warn("[host] 중계 통신 강제인데 중계 서버를 못 쓴다(중계 계정 없음) — sid={} 를 받을 수 없다", sid);
+            send(sid, VillasMsg.description(MSG_NO_RELAY, ""));
+            return;
+        }
         try {
-            WebSocketClient ws = new WebSocketClient(P2PConfig.SIGNALING_URL + "/"
-                    + PeerNames.pairRoom(roomId, sid) + "/" + PeerNames.pairHost(sid)) {
-                @Override public void onConnected() {
-                    send(VillasMsg.hello());
-                    send(VillasMsg.description(MSG_ANSWER, fingerprint));
-                    for (QuicIce.Candidate c : QuicIce.advertised(candidates, relayNow, clientRelayForced)) {
-                        send(VillasMsg.candidate(c.line(), "0"));
-                    }
-                }
-                @Override public void onMessage(String type, String json) {
-                    if (!VillasMsg.has(json, "candidate")) return;
-                    String cand = VillasMsg.object(json, "candidate");
-                    if (cand == null) return;
-                    QuicIce.Candidate c = QuicIce.Candidate.parse(VillasMsg.field(cand, "spd"));
-                    if (c == null) return;
-                    agent.addRemote(c);
-                    if (!theirs.contains(c)) theirs.add(c);
-                }
-            };
-            pair = ws;
-            ws.connect();
+            send(sid, VillasMsg.description(MSG_ANSWER, fingerprint));
+            for (QuicIce.Candidate c : mine) {
+                send(sid, VillasMsg.candidate(c.line(), "0"));
+            }
+            // ownLoop=false — ServerConnector가 이미 수신 루프를 돌리고 있다
             QuicIce.Candidate picked = agent.punch(theirs, PUNCH_MS, false, relayNow);
             LOG.info("[host] punch done sid={} result={}", sid,
                     picked != null ? picked.type() : "none (조인자 쪽 경로로 붙을 수 있다)");
         } catch (Exception e) {
             LOG.warn("[host] negotiation failed sid={}: {}", sid, e.getMessage());
-        } finally {
-            if (pair != null) pair.close();
         }
     }
 
@@ -428,12 +481,13 @@ public final class QuicHost {
             String key = peerKey(remote);
             QuicIce agent = ice;
             String ip = remote != null && remote.getAddress() != null ? remote.getAddress().getHostAddress() : null;
-            boolean relayed = ip != null && (isTurnServer(ip) || (agent != null && agent.sendsViaRelayTo(ip)));
+            // 양쪽 중 하나라도 relay면 중계 — 출처가 TURN 서버이거나, 우리가 그 상대에게 allocation으로 보내고 있거나
+            boolean relayed = ip != null && (isTurnServer(ip) || (agent != null && agent.sendsViaRelayTo(remote)));
             Peer peer = new Peer(key, relayed);
             if (key == null) {
                 LOG.warn("[host] 상대 주소를 못 잡았다 — 이 연결엔 IP 복원이 적용되지 않는다");
             } else if (!relayed) {
-                // 경로가 연결 직후 중계로 바뀌는 경우가 있어 한 번 더 확인한다
+                // 우리 쪽 채널 바인딩이 punch와 나란히 돌아 연결이 먼저 성립할 수 있다 — 2초 뒤 한 번 더 본다
                 worker.execute(() -> {
                     try {
                         TimeUnit.SECONDS.sleep(2);
@@ -441,7 +495,7 @@ public final class QuicHost {
                         return;
                     }
                     QuicIce a2 = ice;
-                    if (a2 != null && a2.sendsViaRelayTo(ip)) {
+                    if (a2 != null && a2.sendsViaRelayTo(remote)) {
                         LOG.info("[host] connection type changed: direct -> relay");
                         peer.markRelayed();
                     }

@@ -16,6 +16,7 @@ import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -25,6 +26,9 @@ import java.util.concurrent.TimeUnit;
  * {@code /p2p open}으로 열 수 있다.
  * <p>
  * 초대 코드는 {@code state.json}에 남겨 재시작해도 그대로 쓴다({@code /p2p newcode}로만 바뀐다).
+ * <p>
+ * 방장 key도 코드와 함께 남긴다. 랑데부 서버는 방장이 끊긴 뒤에도 잠시 그 코드를 이전 key로 잡아 두므로
+ * (재접속한 방장이 방을 되찾게), 같은 코드로 다시 열 때 key가 바뀌면 409 Conflict로 거부된다.
  * 열기·닫기는 네트워크를 기다리므로 전용 스레드 하나에서 차례로 처리한다 — 서버 스레드를 막지 않는다.
  */
 public final class HostController {
@@ -44,12 +48,15 @@ public final class HostController {
     });
 
     private volatile RoomState state = RoomState.CLOSED;
-    private volatile String inviteCode;
+    /** 초대 코드 + 랑데부 방장 key. 한 번도 연 적이 없으면 null */
+    private volatile Room room;
+
+    private record Room(String code, String hostKey) {}
 
     HostController(P2PCore core) {
         this.core = core;
         this.stateFile = core.platform().dataFolder().resolve("state.json");
-        this.inviteCode = loadCode();
+        this.room = loadRoom();
     }
 
     public RoomState state() {
@@ -58,7 +65,8 @@ public final class HostController {
 
     /** 저장된 초대 코드, 한 번도 연 적이 없으면 null */
     public String inviteCode() {
-        return inviteCode;
+        Room r = room;
+        return r != null ? r.code() : null;
     }
 
     // ── 서버 수명주기 ─────────────────────────────────────────────────────────
@@ -99,7 +107,7 @@ public final class HostController {
             return;
         }
         if (state != RoomState.CLOSED) {
-            sender.send(K + (state == RoomState.OPEN ? "open.already" : "open.opening"), new P2PText.Copy(code()));
+            sender.send(K + (state == RoomState.OPEN ? "open.already" : "open.opening"), new P2PText.Copy(room().code()));
             return;
         }
         state = RoomState.OPENING;
@@ -123,9 +131,8 @@ public final class HostController {
         executor.execute(() -> {
             boolean wasOpen = state != RoomState.CLOSED;
             if (wasOpen) doClose();
-            String code = Utils.generateCode();
-            inviteCode = code;
-            saveCode(code);
+            Room r = newRoom();
+            String code = r.code();
             LOG.info("초대 코드를 새로 만들었습니다: {}", code);
             reply(sender, K + "newcode.done", new P2PText.Copy(code));
             if (wasOpen) {
@@ -150,7 +157,7 @@ public final class HostController {
     /** 공개 방 정보를 (다시) 올린다 — Velocity가 백엔드 버전을 알아낸 뒤에도 부른다. */
     public void publishPublicRoom() {
         P2PSettings settings = core.settings();
-        String code = inviteCode;
+        String code = inviteCode();
         if (state != RoomState.OPEN || !settings.publicRoom() || code == null) return;
         if (core.platform().minecraftVersion() == null) return; // 버전을 알아야 목록에서 호환으로 보인다
         String title = settings.title().isEmpty() ? core.platform().motd() : settings.title();
@@ -161,11 +168,12 @@ public final class HostController {
     // ── 실제 작업 (executor 스레드) ────────────────────────────────────────────
 
     private void doOpen(P2PSender sender) {
-        String code = code();
+        Room r = room();
+        String code = r.code();
         try {
             // 인증을 먼저 확인한다 — 방장 연결·TURN·공개 방이 모두 이 토큰을 쓴다
             core.account().publishToken();
-            core.bridge().startHost(code, core.platform().targetHost() + ":" + core.platform().listenPort());
+            core.bridge().startHost(code, r.hostKey(), core.platform().targetHost() + ":" + core.platform().listenPort());
             state = RoomState.OPEN;
             LOG.info("초대 코드: {}", code);
             reply(sender, K + "open.done", new P2PText.Copy(code));
@@ -190,33 +198,52 @@ public final class HostController {
         core.platform().runSync(() -> sender.send(key, args));
     }
 
-    /** 초대 코드 — 없으면 새로 만들어 저장한다. */
-    private synchronized String code() {
-        String c = inviteCode;
-        if (c == null) {
-            c = Utils.generateCode();
-            inviteCode = c;
-            saveCode(c);
-        }
-        return c;
+    /** 초대 코드 + 방장 key — 없으면 새로 만들어 저장한다. */
+    private synchronized Room room() {
+        Room r = room;
+        return r != null ? r : newRoom();
     }
 
-    private String loadCode() {
+    private synchronized Room newRoom() {
+        Room r = new Room(Utils.generateCode(), newHostKey());
+        room = r;
+        saveRoom(r);
+        return r;
+    }
+
+    private static String newHostKey() {
+        return UUID.randomUUID().toString().replace("-", "");
+    }
+
+    private Room loadRoom() {
         if (!Files.exists(stateFile)) return null;
-        try (Reader r = Files.newBufferedReader(stateFile, StandardCharsets.UTF_8)) {
-            JsonObject o = GSON.fromJson(r, JsonObject.class);
-            JsonElement e = o != null ? o.get("inviteCode") : null;
-            String c = e != null && e.isJsonPrimitive() ? e.getAsString() : null;
-            return c != null && Utils.isValidCode(c) ? c : null;
+        try (Reader reader = Files.newBufferedReader(stateFile, StandardCharsets.UTF_8)) {
+            JsonObject o = GSON.fromJson(reader, JsonObject.class);
+            String code = string(o, "inviteCode");
+            if (code == null || !Utils.isValidCode(code)) return null;
+            String key = string(o, "hostKey");
+            if (key == null || !key.matches("[0-9a-f]{32}")) {
+                // 예전 state.json(코드만 있음) — key를 만들어 채운다
+                Room r = new Room(code, newHostKey());
+                saveRoom(r);
+                return r;
+            }
+            return new Room(code, key);
         } catch (IOException | RuntimeException e) {
             LOG.warn("state.json을 읽지 못했습니다 — 초대 코드를 새로 만듭니다: {}", e.getMessage());
             return null;
         }
     }
 
-    private void saveCode(String code) {
+    private static String string(JsonObject o, String key) {
+        JsonElement e = o != null ? o.get(key) : null;
+        return e != null && e.isJsonPrimitive() ? e.getAsString() : null;
+    }
+
+    private void saveRoom(Room r) {
         JsonObject o = new JsonObject();
-        o.addProperty("inviteCode", code);
+        o.addProperty("inviteCode", r.code());
+        o.addProperty("hostKey", r.hostKey());
         try {
             Files.createDirectories(stateFile.getParent());
             try (Writer w = Files.newBufferedWriter(stateFile, StandardCharsets.UTF_8)) {

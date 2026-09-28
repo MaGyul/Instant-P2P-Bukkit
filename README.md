@@ -16,7 +16,30 @@ jar 하나(`instant-p2p-<버전>.jar`)를 서버에 넣으면 됩니다. 각 로
 | Velocity 3.x / 4.x | `plugins/` | `plugins/instant-p2p-proxy/config.json` | 백엔드에는 필요 없음, modern forwarding 권장 |
 | Fabric 1.21+ / 26.x (전용 서버) | `mods/` | `config/instant-p2p-server/config.json` | Fabric API 필요 |
 
-설정 키: `enabled`, `serverUuid`(자동 생성), `targetModVersion`, `title`, `name`, `publicRoom`, `channels`, `channelAnd`, `allowBroadcast`, `relayOnly`, `udpPort`.
+## 사용 방법
+
+원본 모드 1.4부터 방을 열려면 **Minecraft 정품 계정 인증**이 필요합니다. 전용 서버에는 로그인한 플레이어가 없으므로 운영자가 한 번 로그인해 둡니다.
+
+1. 서버 콘솔이나 게임 안(op)에서 `/p2p login`
+2. 안내에 나온 주소(microsoft.com/link)에서 코드를 입력하고 Minecraft 계정으로 로그인
+3. `/p2p open` — 초대 코드가 나옵니다. 설정의 `enabled: true`면 다음부터 서버가 켜질 때 자동으로 엽니다.
+
+| 명령 | 동작 |
+|---|---|
+| `/p2p` (`status`) | 계정, 방 상태·초대 코드, 자동 열기 여부 |
+| `/p2p login` / `logout` | 계정 로그인 / 로그아웃(저장된 로그인 정보 삭제, 열려 있으면 닫음) |
+| `/p2p open` / `close` | 방 열기 / 닫기 |
+| `/p2p code` / `newcode` | 초대 코드 보기 / 새로 만들기(열려 있으면 새 코드로 다시 엶) |
+
+- 권한: `instantp2p.admin`(기본 op). Fabric은 op 또는 콘솔.
+- 게임 안에서는 초대 코드와 로그인 코드가 화면에 찍히지 않고 **[클릭해서 복사]** 버튼으로 나옵니다(방송 대비). 콘솔에는 그대로 나옵니다.
+- 초대 코드는 재시작해도 그대로입니다(`state.json`). `/p2p newcode`로만 바뀝니다.
+- 로그인 정보(갱신 토큰)는 AES-256-GCM으로 암호화해 데이터 폴더의 `account.dat`에 두고, 키는 **서버 폴더 밖**(`~/.instant-p2p/keys/`)에 따로 둡니다.
+  서버 폴더를 백업·공유해도 토큰은 꺼낼 수 없습니다. 서버를 옮기면 다시 로그인하면 됩니다.
+
+## 설정
+
+설정 키: `enabled`(서버 시작 시 자동으로 열기, 기본 `false`), `serverUuid`(자동 생성), `targetModVersion`, `title`, `name`, `publicRoom`, `channels`, `channelAnd`, `allowBroadcast`, `relayOnly`, `udpPort`.
 Velocity만 `minecraftVersion`(비우면 첫 백엔드에 ping해서 정함)이 더 있습니다.
 
 - `targetModVersion`: 기본 `auto`. 공개 방을 올릴 때 시그널링 서버가 알려주는 최신 배포 버전을 씁니다. 특정 버전 클라이언트에게만 보이게 하려면 `"1.3"`처럼 적습니다.
@@ -31,12 +54,12 @@ Velocity만 `minecraftVersion`(비우면 첫 백엔드에 ping해서 정함)이 
 | Java | 21 (26.x는 25) |
 | OS | Windows x86_64, Linux x86_64 (헤드리스) |
 
-위 환경은 WebRTC 시절(모드 1.2.x)에 확인했습니다. 모드 1.3의 QUIC 전환 이후는 다시 확인하는 중입니다.
+위 환경은 모드 1.3(QUIC)까지 확인했습니다. 모드 1.4(랑데부·정품 인증) 대응은 확인하는 중입니다.
 
 ## 동작 구조
 
 ```
-[모드 클라이언트] ──WebSocket── [시그널링 서버] ──WebSocket── [서버 통합판]
+[모드 클라이언트] ──wss── [시그널링(랑데부) 서버] ──wss── [서버 통합판]
        │                                                        │
        └───────────── QUIC (ALPN "instant-p2p", UDP) ────────────┘
                        연결 1개 = 클라이언트 1명, 스트림 1개 = MC 접속 1개
@@ -46,9 +69,9 @@ Velocity만 `minecraftVersion`(비우면 첫 백엔드에 ping해서 정함)이 
                                               Netty에서 접속자 주소 교체 (IP 복원)
 ```
 
-1. 서버가 UDP 소켓 하나로 후보를 모읍니다(host, STUN srflx, TURN relay). 그 소켓 위에 QUIC 서버를 띄우고, 인증서는 실행할 때마다 새로 만드는 자체 서명입니다.
-2. 시그널링 로비 `/{code}/h{4자리 숫자}`에 상주하며 조인 알림(`j{d|r}{sid}`)을 기다립니다.
-3. 조인이 감지되면 페어 세션 `/{code}-{sid}/h{sid}`에 들어가 인증서 지문(`quic-answer`)과 후보를 보내고, 받은 후보로 홀펀칭합니다. 조인자는 지문으로 서버 인증서를 확인합니다.
+1. 운영자 계정으로 시그널링 게시 토큰을 받습니다(challenge → Mojang 세션 등록 → verify). 같은 토큰으로 TURN 임시 계정도 받습니다.
+2. 서버가 UDP 소켓 하나로 후보를 모읍니다(host, STUN srflx, TURN relay). 그 소켓 위에 QUIC 서버를 띄우고, 인증서는 실행할 때마다 새로 만드는 자체 서명입니다.
+3. 랑데부 서버에 방장으로 붙습니다(`/rv/{code}/host`). 조인자가 오면 서버가 sid를 붙여 `join`을 보내 주고, 그 조인자에게만 인증서 지문(`quic-answer`)과 후보를 보내 홀펀칭합니다. 조인자는 지문으로 서버 인증서를 확인합니다.
 4. 조인자는 QUIC 연결을 맺고 MC 접속마다 스트림을 엽니다. 스트림마다 서버 포트로 로컬 TCP를 열어 양방향으로 중계합니다.
 
 ## 원본 모드에서 가져온 부분
@@ -58,15 +81,16 @@ Velocity만 `minecraftVersion`(비우면 첫 백엔드에 ping해서 정함)이 
 | 원본 | 서버 통합판 |
 |---|---|
 | `VillasMsg`, `WebSocketClient`, `SignalingRtt`, `PublicRoomAnnouncer`, `Roles` | 거의 그대로. `spd` 키까지 프로토콜 그대로 유지 |
-| `quic/Stun`, `Turn`, `TurnAllocation`, `QuicIce`, `QuicCert`, `KwikLog` (1.3) | 패키지만 바꿔 그대로 (디컴파일본에서 깨진 try/finally 몇 곳만 복원) |
-| `quic/QuicHost` (1.3) | 서버용으로 재작성. 시그널링·펀칭·QUIC 서버 설정은 동일, 접속자 등록을 `TunnelRegistry`로, 알림을 관리자 메시지로 |
+| `quic/Stun`, `Turn`, `TurnAllocation`, `QuicIce`, `QuicCert`, `KwikLog` (1.4) | 패키지만 바꿔 그대로 (UDP 포트 지정, TURN 먼저 반납만 추가) |
+| `quic/QuicHost` (1.4) | 서버용으로 재작성. 랑데부·펀칭·QUIC 서버 설정은 동일, 접속자 등록을 `TunnelRegistry`로, 알림을 관리자 메시지로 |
+| `MojangAuth` (1.4) | `HostAccount`: 게임 세션 대신 운영자가 기기 코드로 로그인한 계정으로 같은 인증을 한다 |
 | `P2PConfig` | 공개 방 로비 ID 계산은 글자 하나 바꾸지 않고 유지. 설정은 플랫폼별 파일 |
 | `P2PBanManager` (터널 포트 → IP, members 해시) | `TunnelRegistry`, `Utils.encodePlayerHashes` |
 | `PlayerManagerMixin` | Paper/Spigot/Fabric은 `TunnelInjector`(Netty 주입), Velocity는 합성 `HAProxyMessage` |
 | `P2PNet` + `RoomRoles` | 플러그인 채널 `instant-p2p:room_state`, `instant-p2p:moderation` (바이트 포맷 동일) |
 | `ExpelManager` | 서버 측 로직만 이식 (차단자 기준 holders, 차단자 퇴장 시 해제, 오프라인 대상도 기록) |
 
-가져오지 않은 것: `gui/*`, `kcp/*`, 클라이언트 전용 Mixin, `IntegratedServer*` Mixin, `ChzzkLink`, `P2PWhitelistManager`(서버 화이트리스트로 대체), `MojangAuth`(아래 "알려진 제한").
+가져오지 않은 것: `gui/*`, `kcp/*`, 클라이언트 전용 Mixin, `IntegratedServer*` Mixin, `ChzzkLink`, `P2PWhitelistManager`(서버 화이트리스트로 대체).
 
 ## 서버로 옮기면서 한 작업
 
@@ -110,11 +134,11 @@ QUIC 연결의 실제 UDP 출발 주소를 씁니다.
 - **공개 방 로비 ID**에 모드 버전 문자열의 해시가 들어갑니다. `targetModVersion`이 클라이언트 모드 버전과 같아야 목록에 보입니다(`auto`면 최신 배포 버전, 조회 실패 시 1.3).
 - `room_update`의 `version`은 서버 MC 버전입니다. 클라이언트는 자기 버전과 문자열 비교합니다.
 - 시그널링의 `spd` 키, 피어 이름 규칙, members 해시(`base64url(sha256(code + ":" + uuid)[0:8])`)는 원본과 한 글자라도 다르면 연결되지 않습니다.
-- 모드 1.2.x(WebRTC)와는 연결되지 않습니다. 1.3부터 전송이 QUIC으로 바뀌었고 피어 이름도 일부 달라졌습니다.
+- 모드 1.3 이하와는 연결되지 않습니다. 1.3에서 전송이 QUIC으로, 1.4에서 시그널링이 랑데부 방식으로 바뀌었고 방장 인증이 생겼습니다.
 
 ## 알려진 제한
 
-- **공개 방 등록 인증:** 모드 1.3은 공개 방 등록 때 Mojang 계정 인증 토큰을 붙입니다. 시그널링 서버가 인증을 켜면 계정 세션이 없는 전용 서버는 공개 방을 올릴 수 없습니다. 지금은 시그널링 서버에서 꺼져 있습니다. 서버용 방법은 원본 개발자와 논의가 필요합니다.
+- **방장 인증:** 운영자의 Minecraft 계정으로 로그인해야 방을 열 수 있습니다. Microsoft 로그인에는 Minecraft API 사용 승인을 받은 앱 ID(마인월드 런처)를 씁니다. 서버 전용 인증 방식은 원본 개발자와 논의 중입니다.
 - **UDP:** 홀펀칭이 안 되는 네트워크라도 TURN 경로로는 붙습니다. `udpPort`를 정해 열어 두면 직결 비율이 올라갑니다.
 - 모드 UI의 추방·강퇴는 roles.json에 역할이 있는 계정만 요청을 보냅니다(원본 클라이언트 동작). 서버 op나 호스트 권한자는 모드 UI 대신 서버 명령어를 써야 합니다.
 - 시그널링에 인증이 없어 초대 코드가 사실상 유일한 비밀입니다. 화이트리스트나 밴으로 관리해야 합니다.

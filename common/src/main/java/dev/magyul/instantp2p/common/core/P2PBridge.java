@@ -26,15 +26,16 @@ public class P2PBridge {
 
     public P2PBridge(P2PCore core) {
         this.core = core;
-        this.publicRoomAnnouncer = new PublicRoomAnnouncer(core.platform());
+        this.publicRoomAnnouncer = new PublicRoomAnnouncer(core.platform(), () -> core.account().publishTokenOrNull());
     }
 
-    public void startHost(String roomId, String target) throws Exception {
+    /** @param hostKey 랑데부에서 방 코드를 잡아 두는 비밀 — 같은 코드로 다시 열 때 같아야 한다(HostController) */
+    public void startHost(String roomId, String hostKey, String target) throws Exception {
         stopHost();
         Roles.refreshAsync();
 
         LOG.info("[QUIC] Starting host: room={} target={}", roomId, target);
-        QuicHost h = new QuicHost(core, roomId, target);
+        QuicHost h = new QuicHost(core, roomId, hostKey, target);
         host = h;
         h.start();
     }

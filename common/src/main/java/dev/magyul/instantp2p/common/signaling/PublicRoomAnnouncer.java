@@ -7,6 +7,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
@@ -14,6 +16,7 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 
 /**
  * 공개 방 목록 — 새 서버 인프라 없이 기존 시그널링 relay의 lobby/peer 메커니즘을 재사용한다.
@@ -56,6 +59,8 @@ public final class PublicRoomAnnouncer {
     private static final long MAX_BACKOFF_MS     = 30_000;
 
     private final P2PPlatform platform;
+    /** 시그널링 게시 토큰(블로킹, 실패하면 null) — 공개 방 로비 연결에 붙인다(원본 1.4) */
+    private final Supplier<String> token;
 
     private final ScheduledExecutorService scheduler =
             new ScheduledThreadPoolExecutor(1, r -> {
@@ -86,8 +91,9 @@ public final class PublicRoomAnnouncer {
     /** 방을 연 시각(방장 시계, epoch ms) — 방 목록 정렬용. publish() 참고. */
     private volatile long openedAtMs;
 
-    public PublicRoomAnnouncer(P2PPlatform platform) {
+    public PublicRoomAnnouncer(P2PPlatform platform, Supplier<String> token) {
         this.platform = platform;
+        this.token = token;
         scheduler.scheduleWithFixedDelay(() -> {
             if (running && SignalingRtt.bars(SignalingRtt.currentMs()) != SignalingRtt.bars(announcedRttMs)) {
                 sendUpdate();
@@ -179,10 +185,11 @@ public final class PublicRoomAnnouncer {
 
         int shard = P2PConfig.publicRoomShardFor(roomCode);
         String modVersion = ModVersion.resolve(platform.settings().targetModVersion());
+        String t = token.get();
         if (!isCurrent(gen)) return;
         List<WebSocketClient> clients = new ArrayList<>();
         for (String channel : channels) {
-            clients.add(newClient(gen, P2PConfig.publicRoomsLobbyId(channel, shard, modVersion)));
+            clients.add(newClient(gen, P2PConfig.publicRoomsLobbyId(channel, shard, modVersion), t));
         }
         ws = List.copyOf(clients);
         for (WebSocketClient client : clients) {
@@ -203,8 +210,14 @@ public final class PublicRoomAnnouncer {
         sendUpdate();
     }
 
-    private WebSocketClient newClient(int gen, String lobbyId) {
-        return new WebSocketClient(P2PConfig.SIGNALING_URL + "/" + lobbyId + "/r" + roomCode) {
+    /**
+     * 게시 토큰을 쿼리로 실어 보낸다 — 방은 로비의 peer 존재로 만들어지므로 서버가 연결 시점에 막아야 하고,
+     * 그래서 메시지 형식은 건드리지 않는다(원본 1.4). 토큰이 없으면 붙이지 않는다(인증을 안 쓰는 서버면 통과, 쓰면 401).
+     */
+    private WebSocketClient newClient(int gen, String lobbyId, String t) {
+        String url = P2PConfig.SIGNALING_URL + "/" + lobbyId + "/r" + roomCode
+                + (t != null ? "?token=" + URLEncoder.encode(t, StandardCharsets.UTF_8) : "");
+        return new WebSocketClient(url) {
             @Override public void onConnected() {
                 backoffMs = INITIAL_BACKOFF_MS;
                 send(VillasMsg.hello());

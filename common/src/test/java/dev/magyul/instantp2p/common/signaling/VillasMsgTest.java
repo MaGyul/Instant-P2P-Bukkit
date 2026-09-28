@@ -2,8 +2,6 @@ package dev.magyul.instantp2p.common.signaling;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.*;
 
 /** 시그널링 JSON 형식 — "spd" 키(서버 오타 그대로)와 구조는 프로토콜이다. */
@@ -51,17 +49,14 @@ class VillasMsgTest {
     }
 
     @Test
-    void parseControlPeers() {
-        String json = "{\"control\":{\"peer_id\":1,\"peers\":["
-                + "{\"name\":\"h1a2b3\",\"id\":1,\"remote\":\"ip-aaaaaaaaaaaa:1234\"},"
-                + "{\"name\":\"jd0123456789abcdef\",\"id\":2,\"remote\":\"ip-bbbbbbbbbbbb:5678\"},"
-                + "{\"name\":\"jq0123456789abcdef\",\"id\":3}]}}";
-        assertTrue(VillasMsg.has(json, "control"));
-        List<String[]> peers = VillasMsg.peers(json);
-        assertEquals(3, peers.size());
-        assertArrayEquals(new String[]{"h1a2b3", "ip-aaaaaaaaaaaa:1234"}, peers.get(0));
-        assertArrayEquals(new String[]{"jd0123456789abcdef", "ip-bbbbbbbbbbbb:5678"}, peers.get(1));
-        assertArrayEquals(new String[]{"jq0123456789abcdef", null}, peers.get(2));
+    void rendezvousJoinAndSidRouting() {
+        // 랑데부(1.4): 서버 → 방장 join, sid가 붙은 조인자 후보
+        String join = VillasMsg.object("{\"join\":{\"sid\":\"0123456789abcdef\",\"relay\":true}}", "join");
+        assertEquals("0123456789abcdef", VillasMsg.field(join, "sid"));
+        assertEquals("true", VillasMsg.field(join, "relay"));
+        String cand = "{\"sid\":\"0123456789abcdef\",\"candidate\":{\"spd\":\"1.2.3.4 5 srflx\",\"mid\":\"0\"}}";
+        assertEquals("0123456789abcdef", VillasMsg.field(cand, "sid"));
+        assertEquals("1.2.3.4 5 srflx", VillasMsg.field(VillasMsg.object(cand, "candidate"), "spd"));
     }
 
     @Test

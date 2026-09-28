@@ -130,7 +130,8 @@ public abstract class WebSocketClient {
             ok = true;
             if (readIdleTimeoutMs() > 0) SignalingRtt.track(this);
             // 방 목록은 채널×샤드마다 접속해서(최대 20개) 매번 찍으면 로그가 도배된다 — 경로는 debug로만 남긴다.
-            LOG.debug("[ws] connected to {}", url);
+            // URL은 남기지 않는다 — 방 코드·인증 토큰이 들어 있다
+            LOG.debug("[ws] connected");
 
             final InputStream fin = in;
             Thread reader = new Thread(() -> readLoop(fin), "signaling-ws-read");
