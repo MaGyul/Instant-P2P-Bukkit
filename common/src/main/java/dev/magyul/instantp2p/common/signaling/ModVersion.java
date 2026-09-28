@@ -29,10 +29,10 @@ public final class ModVersion {
     private static final Logger LOG = LoggerFactory.getLogger("instant-p2p-public");
 
     public static final String AUTO = "auto";
-    /** 조회 실패 시 — 이 빌드가 맞춘 원본 모드 버전 */
+    /** 조회 실패 시 — 이 빌드가 맞춘 원본 모드 버전(최신 배포) */
     public static final String FALLBACK = "1.4.1";
-    /** 서버판에 붙을 수 있는 가장 낮은 모드 버전 — 원본 개발자: 1.4 이하는 동작하지 않게 막았다 */
-    private static final int[] MIN_SUPPORTED = {1, 4, 1};
+    /** 서버판에 붙을 수 있는 가장 낮은 모드 버전 — 원본 개발자: 1.4 미만은 동작하지 않게 막았다 */
+    private static final int[] MIN_SUPPORTED = {1, 4};
 
     private static final Pattern VALID = Pattern.compile("[0-9A-Za-z.+_-]{1,32}");
     private static final Duration HTTP_TIMEOUT = Duration.ofSeconds(5);

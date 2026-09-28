@@ -10,6 +10,7 @@ instant-p2p 모드(원본: KITE2459/kfcudp-instant-p2p, CC0)의 **호스트 기�
   원본 소스는 `original/`(gitignore)에 두고 참고한다.
 - 전용 서버에는 로그인한 플레이어 세션이 없으므로 운영자가 `/p2p login`(Microsoft 기기 코드)으로 방장 계정을 로그인한다.
   서버용 방장 인증은 이 방식으로 확정(원본 개발자와 합의, 2026-09-29) — 서버 전용 토큰 같은 별도 방식은 두지 않는다.
+  앱 ID는 마인월드 런처 ID를 기본값으로 계속 쓴다(새 앱 등록·Minecraft API 승인은 하지 않기로).
 
 ## 작업 방식
 
@@ -120,7 +121,7 @@ v1_21=intermediary·v26=Mojang 이름을 검사한다.
 설정 키: `enabled`, `serverUuid`, `targetModVersion`, `title`, `name`, `publicRoom`, `channels`, `channelAnd`, `allowBroadcast`, `udpPort`
 (Velocity만 `minecraftVersion` 추가).
 - `targetModVersion`: 기본 `auto` — 공개 방 로비에 접속할 때 시그널링 `/api/v1/version`의 `current`를 받는다(`signaling/ModVersion`).
-  성공값은 announce를 멈출 때까지 재사용, 실패하거나 1.4.1 미만(버전 API 갱신 지연)이면 `1.4.1`로 올리고 다음 재접속 때 다시 묻는다. 폴링하지 않는다(실행 중 새 버전이 나오면 재시작해야 반영).
+  성공값은 announce를 멈출 때까지 재사용, 실패하거나 1.4 미만(버전 API 갱신 지연)이면 `1.4.1`로 올리고 다음 재접속 때 다시 묻는다. 폴링하지 않는다(실행 중 새 버전이 나오면 재시작해야 반영).
 - `udpPort`: QUIC UDP 포트, 기본 0(임의). 이미 쓰이면 경고 후 임의 포트. 방화벽에서 열어 두면 직결이 잘 된다.
   25565 UDP는 `enable-query`, 24454는 Simple Voice Chat, 19132는 Geyser가 쓰므로 피하라고 안내.
 
@@ -192,7 +193,6 @@ v1_21=intermediary·v26=Mojang 이름을 검사한다.
 
 ## 남은 작업
 
-- 배포 전 결정: Microsoft 로그인 앱 ID를 계속 마인월드 ID로 기본값에 둘지.
 - relay 사용을 끄거나 제한하는 설정 (원본 개발자 인프라 부담 완화용).
 
 ## 테스트 체크리스트 (플랫폼마다)
