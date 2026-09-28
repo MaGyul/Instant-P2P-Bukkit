@@ -150,7 +150,7 @@ QUIC 연결의 실제 UDP 출발 주소를 씁니다.
 ## 크레딧 및 라이선스
 
 - 이 프로젝트: [MIT](LICENSE)
-- 원본 모드: [instant-p2p](https://github.com/KITE2459/kfcudp-instant-p2p) (CC0)
+- 원본 모드: [instant-p2p](https://github.com/KITE2459/kfcudp-instant-p2p) (MIT)
 - [kwik](https://github.com/ptrd/kwik), agent15 (LGPL-3.0) — QUIC. `dev.magyul.instantp2p.libs`로 relocate해서 포함
 - [hkdf](https://github.com/patrickfav/hkdf) (Apache-2.0), [siphash](https://github.com/whitfin/siphash-java) (MIT)
 - 함께 넣은 라이브러리의 라이선스 전문과 고지는 [`licenses/`](licenses/)와 jar 안 `META-INF/licenses/`에 있습니다.
