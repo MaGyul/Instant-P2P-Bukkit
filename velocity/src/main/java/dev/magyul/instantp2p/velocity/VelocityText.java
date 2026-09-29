@@ -39,7 +39,7 @@ final class VelocityText {
 
     /**
      * fallback의 {@code %s} 자리에 인자 컴포넌트를 끼워 넣는다. 레거시 서식 코드는 조각마다 스타일로 바꾸고,
-     * 인자 뒤 조각은 앞 조각의 마지막 색을 이어받는다(§ 문자는 남기지 않는다).
+     * 인자와 그 뒤 조각은 앞 조각의 마지막 색을 이어받는다(§ 문자는 남기지 않는다). (Paper AdventureText와 같은 규칙)
      */
     private static Component filled(String fallback, ComponentLike[] args) {
         String[] parts = fallback.split("%s", -1);
@@ -49,9 +49,15 @@ final class VelocityText {
             String seg = carry + parts[i];
             if (!parts[i].isEmpty()) out.append(LegacyComponentSerializer.legacySection().deserialize(seg));
             carry = lastColorCode(seg);
-            if (i < parts.length - 1 && i < args.length) out.append(args[i]);
+            if (i < parts.length - 1 && i < args.length) out.append(colored(args[i], carry));
         }
         return out.build();
+    }
+
+    /** 인자에 앞 조각의 색을 입힌다 — 인자가 자기 색을 가지면 그게 우선 */
+    private static ComponentLike colored(ComponentLike arg, String code) {
+        LegacyFormat format = code.isEmpty() ? null : LegacyComponentSerializer.parseChar(code.charAt(1));
+        return format != null && format.color() != null ? Component.text().color(format.color()).append(arg).build() : arg;
     }
 
     private static String lastColorCode(String s) {

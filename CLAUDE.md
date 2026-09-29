@@ -71,6 +71,9 @@ MC 버전은 `Bukkit.getBukkitVersion()`(`getMinecraftVersion()`은 Paper 전용
   `NoSuchMethodError`/`IllegalAccessError`가 난다. 실제로 걸린 것: `MinecraftServer.schedule`(없음)·`wrapRunnable`(protected),
   `ServerPlayer.sendSystemMessage(Component)`(없음 → `(Component, boolean)`), `ClickEvent`(1.21.5에 record로 바뀜 → `Compat`).
   서버 스레드로 넘길 때는 JDK `Executor.execute`만 쓴다(`FabricPlatform.runSync`).
+- **26.x판도 같은 문제가 있다** — 26.1로 컴파일하지만 26.3에서 `ChatFormatting.isColor()`가 없어져 `NoSuchMethodError`(1.1.0 개발 중 실측).
+  `ChatFormatting`은 26.3에 `getByCode`/`stripFormatting`만 남았다 → 색 여부는 코드 문자로 판단(`FabricText.appendLegacy`).
+  MC API를 새로 쓰면 v1_21은 1.21.0, v26은 26.1·최신 26.x 서버 jar와 대조한다(javap, 상위 클래스까지).
 - **MC 클래스를 리플렉션으로 이름 찾기 금지** — 1.21.x 런타임은 intermediary라 record accessor도 `comp_XXXX`다
   (`NameAndId.id()` = `comp_4422`, 1.21.11 정원 초과 입장이 안 되던 원인). authlib `GameProfile`은 난독화되지 않아 이름으로 되지만,
   MC 쪽은 반환 타입으로 찾는다(`Profiles.id/name`).
