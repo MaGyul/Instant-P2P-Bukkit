@@ -2,6 +2,7 @@ package dev.magyul.instantp2p.fabric;
 
 import dev.magyul.instantp2p.common.MinecraftVersions;
 import net.fabricmc.api.DedicatedServerModInitializer;
+import net.fabricmc.api.EnvType;
 import net.fabricmc.loader.api.FabricLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,6 +32,15 @@ public final class FabricEntry implements DedicatedServerModInitializer {
                 .orElse(null);
     }
 
+    /**
+     * 전용 서버인지 — 클라이언트(싱글플레이 통합 서버 포함)에서는 아무것도 하지 않는다.
+     * fabric.mod.json의 {@code "environment": "server"}로 Loader가 클라이언트에서는 이 모드를 로드하지 않지만,
+     * 서버용 jar를 클라이언트 mods에 넣는 경우가 있어 코드에서도 한 번 더 막는다.
+     */
+    static boolean isDedicatedServer() {
+        return FabricLoader.getInstance().getEnvironmentType() == EnvType.SERVER;
+    }
+
     /** 버전에 맞는 구현 패키지 이름({@code v1_21}/{@code v26}), 지원하지 않는 버전이면 null. {@link MixinPlugin}도 같은 기준을 쓴다. */
     static String implPackage(String version) {
         if (!MinecraftVersions.atLeast(version, 1, 21)) return null;
@@ -39,6 +49,10 @@ public final class FabricEntry implements DedicatedServerModInitializer {
 
     @Override
     public void onInitializeServer() {
+        if (!isDedicatedServer()) {
+            LOGGER.warn("instant-p2p 서버 통합판은 전용 서버용입니다 — 클라이언트에서는 동작하지 않습니다. 클라이언트에는 원본 instant-p2p 모드를 넣으세요.");
+            return;
+        }
         String version = minecraftVersion();
         String pkg = implPackage(version);
         if (pkg == null) {

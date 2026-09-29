@@ -10,7 +10,7 @@ import java.util.Set;
 /**
  * Mixin 적용 범위를 MC 버전으로 고른다 — {@link FabricEntry}와 같은 이유로, 1.21.x(intermediary 이름)와
  * 26.x(Mojang 이름) Mixin 중 런타임 이름에 맞는 하나만 등록한다(설정 파일의 목록은 비워 둔다).
- * 1.21 미만이면 아무것도 적용하지 않는다.
+ * 1.21 미만이거나 클라이언트(싱글플레이 통합 서버 포함)면 아무것도 적용하지 않는다({@link FabricEntry#isDedicatedServer}).
  */
 public final class MixinPlugin implements IMixinConfigPlugin {
 
@@ -32,6 +32,7 @@ public final class MixinPlugin implements IMixinConfigPlugin {
 
     @Override
     public List<String> getMixins() {
+        if (!FabricEntry.isDedicatedServer()) return List.of();
         String pkg = FabricEntry.implPackage(FabricEntry.minecraftVersion());
         return pkg == null ? List.of() : List.of(pkg + ".PlayerListMixin");
     }

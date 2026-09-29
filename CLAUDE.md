@@ -54,6 +54,8 @@ MC 버전은 `Bukkit.getBukkitVersion()`(`getMinecraftVersion()`은 Paper 전용
 사용자 파일이 기본값으로 덮인다(실제로 겪음). `PaperSettings`가 `YamlConfiguration.load`로 직접 파싱하고, 오류면 예외·파일 무변경.
 
 ### Fabric — `fabric-base`, `fabric-shared`, `fabric-1_21`, `fabric-26`
+- 전용 서버에서만 동작: `fabric.mod.json`의 `"environment": "server"`(Loader가 클라이언트에서는 로드 안 함) + 진입점이 `DedicatedServerModInitializer` +
+  `FabricEntry.isDedicatedServer()`로 진입점·`MixinPlugin` 모두 한 번 더 막는다(클라이언트 mods에 넣는 사람 대비, 싱글플레이 통합 서버도 제외).
 - `fabric-base` — MC를 참조하지 않는 부분: `FabricEntry`(진입점), `ServerListFiles`. 설정은 `config/instant-p2p-server/config.json`(`JsonSettings`).
   `FabricEntry`는 MC 버전을 보고 구현을 리플렉션으로 고른다 — 1.21.x는 intermediary(`class_XXXX`), 26.x는 intermediary가
   `0.0.0`(빈 매핑)이라 Mojang 이름으로 돌아서 컴파일 결과물 하나로 둘 다 돌릴 수 없다.

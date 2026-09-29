@@ -38,7 +38,8 @@ val universalJar by tasks.registering(Jar::class) {
     }
     // 1.21.x(intermediary로 remap)와 26.x(Mojang 이름) 구현, 버전을 보고 고르는 진입점
     from(fabricFiles.map { files -> files.map { archives.zipTree(it.asFile) } }) {
-        include("dev/magyul/instantp2p/fabric/**", "fabric.mod.json", "instant-p2p-server.mixins.json")
+        include("dev/magyul/instantp2p/fabric/**", "fabric.mod.json", "instant-p2p-server.mixins.json",
+            "assets/instant-p2p-server/**")
     }
 
     // 이 프로젝트(MIT)와 함께 넣은 라이브러리(kwik·agent15 LGPL-3.0, hkdf Apache-2.0, siphash MIT)의 라이선스·고지
@@ -62,6 +63,7 @@ val checkUniversalJar by tasks.registering {
 
             listOf(
                 "plugin.yml", "velocity-plugin.json", "fabric.mod.json", "instant-p2p-server.mixins.json",
+                "assets/instant-p2p-server/icon.png",
                 "dev/magyul/instantp2p/paper/PaperEntry.class",
                 "dev/magyul/instantp2p/velocity/VelocityEntry.class",
                 "dev/magyul/instantp2p/fabric/FabricEntry.class",
