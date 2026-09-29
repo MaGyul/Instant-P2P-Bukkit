@@ -34,8 +34,8 @@ slf4j·Gson·Guava·Netty는 compileOnly(MC 1.21.0 번들 버전 기준 — 새 
 | `core/P2PSettings`, `JsonSettings` | 설정 값 record, JSON 설정 로더(Fabric/Velocity 공용, 모르는 키는 보존) |
 | `core/P2PCore` | 공통 컨텍스트: 터널 레지스트리, expel, 브리지, 이벤트로 관리하는 접속자 집합, 로그인/입장/퇴장/moderation, IP 복원 불가 상태 |
 | `core/P2PBridge`, `ExpelManager` | 호스트 수명주기·공개 방 announce 연결, expel/kick 규칙 |
-| `quic/QuicHost` | QUIC 호스트(원본 1.4 기반): 랑데부 시그널링, 펀칭, kwik 서버, 스트림 → 로컬 TCP, 접속자 주소 결정 |
-| `quic/QuicIce`, `Stun`, `Turn`, `TurnAllocation`, `QuicCert`, `KwikLog` | 원본 1.4 그대로 + `[서버판]` 표시 부분(UDP 포트 지정, `releaseTurn`) |
+| `quic/QuicHost` | QUIC 호스트(원본 1.4.3 기반): 랑데부 시그널링, 펀칭, kwik 서버, 스트림 → 로컬 TCP, 접속자 주소 결정 |
+| `quic/QuicIce`, `Stun`, `Turn`, `TurnAllocation`, `QuicCert`, `KwikLog` | 원본 1.4.3 그대로 + `[서버판]` 표시 부분(UDP 포트 지정, `releaseTurn`) |
 | `signaling/VillasMsg`, `WebSocketClient`, `SignalingRtt` | 시그널링 메시지, WS 클라이언트(wss·도메인 확인), RTT |
 | `signaling/PublicRoomAnnouncer`, `Roles`, `P2PConfig`, `ModVersion` | 공개 방 announce, 역할 조회(서명 검증), 상수·채널 정규화·로비 ID 계산, `targetModVersion: auto` 해석 |
 | `network/PacketByteBuf`, `network/packet/RoomState`, `Moderation` | 플러그인 채널 페이로드 코덱 |
@@ -121,11 +121,11 @@ v1_21=intermediary·v26=Mojang 이름을 검사한다.
 설정 키: `enabled`, `serverUuid`, `targetModVersion`, `title`, `name`, `publicRoom`, `channels`, `channelAnd`, `allowBroadcast`, `udpPort`
 (Velocity만 `minecraftVersion` 추가).
 - `targetModVersion`: 기본 `auto` — 공개 방 로비에 접속할 때 시그널링 `/api/v1/version`의 `current`를 받는다(`signaling/ModVersion`).
-  성공값은 announce를 멈출 때까지 재사용, 실패하거나 1.4 미만(버전 API 갱신 지연)이면 `1.4.1`로 올리고 다음 재접속 때 다시 묻는다. 폴링하지 않는다(실행 중 새 버전이 나오면 재시작해야 반영).
+  성공값은 announce를 멈출 때까지 재사용, 실패하거나 1.4.3 미만(버전 API 갱신 지연)이면 `1.4.3`으로 올리고 다음 재접속 때 다시 묻는다. 폴링하지 않는다(실행 중 새 버전이 나오면 재시작해야 반영).
 - `udpPort`: QUIC UDP 포트, 기본 0(임의). 이미 쓰이면 경고 후 임의 포트. 방화벽에서 열어 두면 직결이 잘 된다.
   25565 UDP는 `enable-query`, 24454는 Simple Voice Chat, 19132는 Geyser가 쓰므로 피하라고 안내.
 
-## 건드리면 안 되는 것 (원본 모드 1.4와의 호환)
+## 건드리면 안 되는 것 (원본 모드 1.4.3과의 호환)
 
 - 인프라: 시그널링 `wss://kite-private-cloud.kro.kr`(평문 8090은 닫힘), STUN/TURN `:3490`(TURN 계정은 `/api/v1/turn/credentials?token=`로 발급, 고정 계정 없음).
 - 인증: `/api/v1/auth/challenge` → Mojang `session/minecraft/join`(accessToken, 대시 없는 uuid, serverId=challenge) →
@@ -136,6 +136,10 @@ v1_21=intermediary·v26=Mojang 이름을 검사한다.
   서버는 방장이 끊긴 뒤에도 잠시 그 코드를 **이전 key로 잡아 둔다** → 같은 코드로 다시 열 때 key가 다르면 409 Conflict.
   원본은 방마다 새 코드·새 key지만 서버판은 코드를 유지하므로 key도 `state.json`(`inviteCode`, `hostKey`)에 함께 저장한다.
 - 시그널링 JSON의 `spd` 키(오타지만 프로토콜), `description`/`candidate` 구조.
+- **접속 표(1.4.3)**: `quic-answer` 값은 `"<지문> <표 32hex>"`, 조인자는 **모든 스트림 맨 앞 16바이트**에 표를 싣는다. 방장은 첫 스트림에서
+  표를 소진해 연결을 확인하고(3초 안에 안 오면 연결째 끊음), 이후 스트림은 같은 표여야 한다. 표 확인은 MC 서버 다이얼·터널 등록보다 먼저.
+  1.4.3 클라이언트는 표가 없으면 포기하고, 1.4.2 이하는 표가 붙으면 지문을 못 읽는다 → 서버판은 1.4.3 이상만(`ModVersion.MIN_SUPPORTED`).
+  피어당 양방향 스트림 상한 16. 연결 ID 길이 8 고정(`IceSocket.CID_LENGTH`) — 조인자 주소가 바뀌면 연결 ID로 알아보고 확인 후 따라간다(kwik에는 처음 주소로 보임).
 - QUIC: ALPN `instant-p2p`, 첫 메시지 description type `quic-answer` + 인증서 SHA-256 지문(대문자 hex), 후보 줄 `"ip port type"`(mid `0`),
   중계 강제인데 relay 후보가 없으면 `quic-no-relay`.
 - 공개 방 로비 연결 URL에 `?token=`(메시지 형식은 그대로).
@@ -163,7 +167,7 @@ v1_21=intermediary·v26=Mojang 이름을 검사한다.
 - `TunnelRegistry` 키는 (IP, 포트). relay 여부는 IP가 아니라 터널 단위(연결 직후 중계로 바뀌면 그 연결의 터널을 전부 고친다).
 
 ### QUIC / kwik
-- `quic/*`는 원본 1.4 소스를 그대로 가져왔다 — 원본이 바뀌면 파일째 다시 가져오고 `[서버판]` 표시 부분만 다시 얹는다.
+- `quic/*`는 원본 1.4.3(커밋 9586cc5) 소스를 그대로 가져왔다 — 원본이 바뀌면 `original/`을 기준으로 3-way 병합(`git merge-file`)하고 `[서버판]` 표시 부분을 확인한다. `QuicHost`는 서버판 재작성이라 변경을 손으로 옮긴다.
 - 1.4 `IceSocket`은 소켓 버퍼를 키운다(64KB 기본이면 청크 폭주 때 OS가 데이터그램을 버려 끊김) — 줄이지 말 것.
 - WS URL에 방 코드·토큰이 들어가므로 URL·메시지 원문을 로그에 남기지 않는다(`WebSocketClient`, `QuicHost.openLobby`).
 - `ServerConnectorImpl.DEFAULT_CLOSE_TIMEOUT_IN_SECONDS = 2`(원본과 같게) — 기본 30초면 종료가 오래 걸린다.

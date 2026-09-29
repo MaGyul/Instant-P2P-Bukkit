@@ -3,7 +3,7 @@
 [instant-p2p](https://github.com/KITE2459/kfcudp-instant-p2p) 모드의 **호스트 기능을 서버 쪽으로 옮긴 것**입니다.
 모드를 설치한 클라이언트가 초대 코드나 공개 방 목록으로 서버에 그대로 접속할 수 있습니다. 서버 포트를 열 필요가 없습니다.
 
-> 원본 모드 개발자의 승인을 받아 배포하는 서버용 통합판입니다. 원본 모드 **1.4 이상** 클라이언트와 연결됩니다.
+> 원본 모드 개발자의 승인을 받아 배포하는 서버용 통합판입니다. 원본 모드 **1.4.3 이상** 클라이언트와 연결됩니다(1.4.3부터 접속 표가 필요해 1.4.2 이하는 원본 방장에게도 못 붙습니다).
 > 시그널링/STUN/TURN 서버는 원본 모드 개발자가 운영하는 인프라를 그대로 사용합니다 — 중계(TURN)는 직결이 안 될 때만 쓰이니,
 > 가능하면 `udpPort`를 정해 UDP로 열어 두어 원본 인프라의 부담을 줄여 주세요.
 
@@ -44,7 +44,7 @@ jar 하나(`instant-p2p-server-<버전>.jar`)를 서버에 넣으면 됩니다. 
 설정 키: `enabled`(서버 시작 시 자동으로 열기, 기본 `false`), `serverUuid`(자동 생성), `targetModVersion`, `title`, `name`, `publicRoom`, `channels`, `channelAnd`, `allowBroadcast`, `udpPort`.
 Velocity만 `minecraftVersion`(비우면 첫 백엔드에 ping해서 정함)이 더 있습니다.
 
-- `targetModVersion`: 기본 `auto`. 공개 방을 올릴 때 시그널링 서버가 알려주는 최신 배포 버전을 씁니다. 특정 버전 클라이언트에게만 보이게 하려면 `"1.4.1"`처럼 적습니다. 서버판은 모드 1.4 이상만 받으므로, 버전 API가 1.4 미만을 주면(서버 쪽 갱신 지연) 1.4.1을 씁니다.
+- `targetModVersion`: 기본 `auto`. 공개 방을 올릴 때 시그널링 서버가 알려주는 최신 배포 버전을 씁니다. 특정 버전 클라이언트에게만 보이게 하려면 `"1.4.3"`처럼 적습니다. 서버판은 모드 1.4.3 이상만 받으므로, 버전 API가 1.4.3 미만을 주면(서버 쪽 갱신 지연) 1.4.3을 씁니다.
 - `udpPort`: QUIC이 쓸 UDP 포트. 기본 `0`은 실행할 때마다 임의 포트입니다. 방화벽이 있는 서버라면 포트를 정해 UDP로 열어 두면 중계 없이 직결되는 경우가 늘어납니다.
   다른 UDP 용도(`enable-query`의 25565, Simple Voice Chat 24454, Geyser 19132)와 겹치지 않게 하세요. 이미 쓰이는 포트면 경고를 남기고 임의 포트로 엽니다.
 
@@ -85,8 +85,8 @@ Velocity만 `minecraftVersion`(비우면 첫 백엔드에 ping해서 정함)이 
 | 원본 | 서버 통합판 |
 |---|---|
 | `VillasMsg`, `WebSocketClient`, `SignalingRtt`, `PublicRoomAnnouncer`, `Roles` | 거의 그대로. `spd` 키까지 프로토콜 그대로 유지 |
-| `quic/Stun`, `Turn`, `TurnAllocation`, `QuicIce`, `QuicCert`, `KwikLog` (1.4) | 패키지만 바꿔 그대로 (UDP 포트 지정, TURN 먼저 반납만 추가) |
-| `quic/QuicHost` (1.4) | 서버용으로 재작성. 랑데부·펀칭·QUIC 서버 설정은 동일, 접속자 등록을 `TunnelRegistry`로, 알림을 관리자 메시지로 |
+| `quic/Stun`, `Turn`, `TurnAllocation`, `QuicIce`, `QuicCert`, `KwikLog` (1.4.3) | 패키지만 바꿔 그대로 (UDP 포트 지정, TURN 먼저 반납만 추가) |
+| `quic/QuicHost` (1.4.3) | 서버용으로 재작성. 랑데부·펀칭·QUIC 서버 설정·접속 표는 동일, 접속자 등록을 `TunnelRegistry`로, 알림을 관리자 메시지로 |
 | `MojangAuth` (1.4) | `HostAccount`: 게임 세션 대신 운영자가 기기 코드로 로그인한 계정으로 같은 인증을 한다 |
 | `P2PConfig` | 공개 방 로비 ID 계산은 글자 하나 바꾸지 않고 유지. 설정은 플랫폼별 파일 |
 | `P2PBanManager` (터널 포트 → IP, members 해시) | `TunnelRegistry`, `Utils.encodePlayerHashes` |
@@ -135,7 +135,7 @@ QUIC 연결의 실제 UDP 출발 주소를 씁니다.
 
 ## 원본 모드와의 호환성 주의
 
-- **공개 방 로비 ID**에 모드 버전 문자열의 해시가 들어갑니다. `targetModVersion`이 클라이언트 모드 버전과 같아야 목록에 보입니다(`auto`면 최신 배포 버전, 조회 실패나 1.4 미만이면 1.4.1).
+- **공개 방 로비 ID**에 모드 버전 문자열의 해시가 들어갑니다. `targetModVersion`이 클라이언트 모드 버전과 같아야 목록에 보입니다(`auto`면 최신 배포 버전, 조회 실패나 1.4.3 미만이면 1.4.3).
 - `room_update`의 `version`은 서버 MC 버전입니다. 클라이언트는 자기 버전과 문자열 비교합니다.
 - 시그널링의 `spd` 키, 피어 이름 규칙, members 해시(`base64url(sha256(code + ":" + uuid)[0:8])`)는 원본과 한 글자라도 다르면 연결되지 않습니다.
 - 모드 1.3 이하와는 연결되지 않습니다. 1.3에서 전송이 QUIC으로, 1.4에서 시그널링이 랑데부 방식으로 바뀌었고 방장 인증이 생겼습니다.

@@ -30,9 +30,9 @@ public final class ModVersion {
 
     public static final String AUTO = "auto";
     /** 조회 실패 시 — 이 빌드가 맞춘 원본 모드 버전(최신 배포) */
-    public static final String FALLBACK = "1.4.1";
-    /** 서버판에 붙을 수 있는 가장 낮은 모드 버전 — 원본 개발자: 1.4 미만은 동작하지 않게 막았다 */
-    private static final int[] MIN_SUPPORTED = {1, 4};
+    public static final String FALLBACK = "1.4.3";
+    /** 서버판에 붙을 수 있는 가장 낮은 모드 버전 — 1.4.3부터 접속 표가 필요하고, 표를 붙인 응답은 1.4.2 이하가 읽지 못한다 */
+    private static final int[] MIN_SUPPORTED = {1, 4, 3};
 
     private static final Pattern VALID = Pattern.compile("[0-9A-Za-z.+_-]{1,32}");
     private static final Duration HTTP_TIMEOUT = Duration.ofSeconds(5);

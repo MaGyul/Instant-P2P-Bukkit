@@ -27,6 +27,8 @@ import java.net.Socket;
 import java.net.SocketException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -36,9 +38,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * QUIC 호스트 (원본 모드 1.4의 QuicHost를 서버용으로 옮김).
@@ -98,6 +103,31 @@ public final class QuicHost {
     /** sid → 진행 중인 협상. 조인자가 떠나면(leave) 끊어 협상 자리를 돌려준다. */
     private final Map<String, Future<?>> negotiations = new ConcurrentHashMap<>();
     private final Semaphore negotiating = new Semaphore(MAX_NEGOTIATIONS);
+
+    /**
+     * 접속 표(원본 1.4.3) — 랑데부로 협상한 조인자에게만 주는 일회용 무작위 값(값 = 만료 시각). 조인자는 <b>모든 스트림의
+     * 맨 앞 {@link #TICKET_BYTES} 바이트</b>에 이걸 싣고, 방장은 표가 맞는 연결만 받는다. 1.4.3 클라이언트는 {@code quic-answer}에
+     * 표가 없으면 접속을 포기한다("방장이 옛 버전일 수 있습니다").
+     * <p>
+     * 방장 UDP 주소는 후보로 조인자 전원(공개 방이면 누구나)에게 나가는데 QUIC 서버는 그 포트로 오는 연결을 누구에게서나 받는다 —
+     * 표가 없으면 랑데부의 접속 제한을 건너뛰고 직접 들어와 연결마다 스트림 × (스레드 + MC 서버 TCP)를 만들 수 있었다.
+     * 표는 스트림 데이터 안에 실려 암호화된 뒤 나간다. 표 없는 연결은 첫 스트림에서 {@link #TICKET_WAIT_MS} 안에 연결째 끊긴다.
+     */
+    private final Map<String, Long> tickets = new ConcurrentHashMap<>();
+    static final int TICKET_BYTES = 16;
+    /** 표 유효 시간 — 조인자가 핸드셰이크를 몇 번 시도해도 넉넉하되 오래 두지는 않는다. */
+    private static final long TICKET_TTL_MS = 120_000;
+    /** 첫 스트림에서 표를 읽을 때까지 기다리는 한도. kwik 스트림 읽기엔 시간 제한이 없어 연결을 닫아 깨운다. */
+    private static final long TICKET_WAIT_MS = 3_000;
+    /** 표를 아직 못 낸(확인 중인) 연결의 동시 상한 — 표 없는 연결이 몰려도 스레드가 무한히 늘지 않게. */
+    private final Semaphore unauth = new Semaphore(32);
+    private final ScheduledExecutorService watchdog = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "quic-host-watchdog");
+        t.setDaemon(true);
+        return t;
+    });
+    private static final SecureRandom RNG = new SecureRandom();
+    private volatile long lastRogueLog;
     private final ExecutorService worker = Executors.newCachedThreadPool(r -> {
         Thread t = new Thread(r, "quic-host-worker");
         t.setDaemon(true);
@@ -168,6 +198,7 @@ public final class QuicHost {
         if (s != null) s.close();
         if (agent != null) agent.close();
         worker.shutdownNow();
+        watchdog.shutdownNow();
         LOG.info("[quic-host] stopped room={} ({}ms)", roomId, System.currentTimeMillis() - t0);
     }
 
@@ -341,14 +372,16 @@ public final class QuicHost {
     private void negotiate(String sid, boolean clientRelayForced, List<QuicIce.Candidate> theirs) {
         QuicIce agent = ice;
         if (agent == null || !running.get()) return;
-        List<QuicIce.Candidate> mine = QuicIce.advertised(candidates, false, clientRelayForced);
+        // 중계 서버가 재시작돼 allocation을 다시 잡았으면 지금 relay 후보로 바꿔 알린다(원본 1.4.2)
+        List<QuicIce.Candidate> mine = QuicIce.advertised(agent.withCurrentRelay(candidates), false, clientRelayForced);
         if (mine.isEmpty()) {
             LOG.warn("[host] 조인자에게 알릴 후보가 없다(STUN·중계 모두 실패) — sid={} 를 받을 수 없다", sid);
             send(sid, VillasMsg.description(MSG_NO_RELAY, ""));
             return;
         }
         try {
-            send(sid, VillasMsg.description(MSG_ANSWER, fingerprint));
+            // 지문 뒤에 접속 표를 붙인다 — 이 조인자에게만 간다(서버가 sid로 라우팅)
+            send(sid, VillasMsg.description(MSG_ANSWER, fingerprint + " " + newTicket()));
             for (QuicIce.Candidate c : mine) {
                 send(sid, VillasMsg.candidate(c.line(), "0"));
             }
@@ -403,7 +436,66 @@ public final class QuicHost {
         }
     }
 
-    private void bridge(QuicStream stream, Peer peer) {
+    private String newTicket() {
+        long now = System.currentTimeMillis();
+        tickets.values().removeIf(exp -> exp < now); // 만료된 표를 치운다
+        byte[] b = new byte[TICKET_BYTES];
+        RNG.nextBytes(b);
+        String hex = HexFormat.of().formatHex(b);
+        tickets.put(hex, now + TICKET_TTL_MS);
+        return hex;
+    }
+
+    /** 표를 <b>한 번만</b> 쓰게 꺼낸다 — 있고 만료 전이면 true. */
+    private boolean takeTicket(String hex) {
+        Long exp = tickets.remove(hex);
+        return exp != null && exp >= System.currentTimeMillis();
+    }
+
+    /**
+     * 스트림 맨 앞 접속 표를 읽어 확인한다({@link #tickets}). 이 연결의 <b>첫</b> 스트림이면 표를 소진해 연결을 확인 상태로 만들고,
+     * 이후 스트림은 같은 표로 시작하는지만 본다. 틀리거나 시간 안에 안 오면 연결째 닫는다. (원본 1.4.3 그대로)
+     *
+     * @return 통과하면 true — 이때 스트림 입력은 표 16바이트를 소비한 상태다
+     */
+    private boolean admit(QuicStream stream, QuicConnection conn, AtomicReference<String> authed) {
+        final boolean first = authed.get() == null;
+        if (first && !unauth.tryAcquire()) {
+            conn.close(); // 표를 못 낸 연결이 이미 너무 많다
+            return false;
+        }
+        ScheduledFuture<?> kill = first ? watchdog.schedule(() -> conn.close(), TICKET_WAIT_MS, TimeUnit.MILLISECONDS) : null;
+        try {
+            byte[] t = stream.getInputStream().readNBytes(TICKET_BYTES);
+            boolean ok = false;
+            if (t.length == TICKET_BYTES) {
+                String hex = HexFormat.of().formatHex(t);
+                synchronized (authed) { // 첫 스트림 둘이 동시에 와도 한 번만 소진한다
+                    String cur = authed.get();
+                    ok = cur != null ? cur.equals(hex) : takeTicket(hex) && authed.compareAndSet(null, hex);
+                }
+            }
+            if (!ok) {
+                // 불청객이 로그를 도배하지 못하게 10초에 한 번만. 상대 주소는 남기지 않는다.
+                long now = System.currentTimeMillis();
+                if (now - lastRogueLog > 10_000) {
+                    lastRogueLog = now;
+                    LOG.warn("[quic-host] 접속 표가 없거나 틀린 연결을 끊는다");
+                }
+                conn.close();
+            }
+            return ok;
+        } catch (IOException e) {
+            return false; // 시간 안에 표가 안 와서 연결이 닫혔다
+        } finally {
+            if (kill != null) kill.cancel(false);
+            if (first) unauth.release();
+        }
+    }
+
+    private void bridge(QuicStream stream, Peer peer, QuicConnection conn, AtomicReference<String> authed) {
+        // 표 확인이 MC 서버로 다이얼·터널 등록보다 먼저 — 표 없는 연결은 서버에 닿지 않는다
+        if (!admit(stream, conn, authed)) return;
         Socket tcp = new Socket();
         TunnelRegistry.Tunnel tunnel = null;
         try {
@@ -462,7 +554,8 @@ public final class QuicHost {
 
     private final class TunnelFactory implements ApplicationProtocolConnectionFactory {
 
-        @Override public int maxConcurrentPeerInitiatedBidirectionalStreams() { return 100; }
+        /** MC는 접속자당 TCP 하나 = 스트림 하나지만 재접속 중 겹칠 수 있어 여유를 둔다. 한 명이 스레드·MC 연결을 무한정 못 만들게 16(원본 1.4.3). */
+        @Override public int maxConcurrentPeerInitiatedBidirectionalStreams() { return 16; }
         @Override public int maxConcurrentPeerInitiatedUnidirectionalStreams() { return 0; }
         @Override public int minBidirectionalStreamReceiverBufferSize() { return 1_000_000; }
 
@@ -497,10 +590,12 @@ public final class QuicHost {
             }
             LOG.info("[host] QUIC connection accepted (relay={})", relayed);
 
+            // 이 연결이 확인받은 표(hex) — 첫 스트림이 정한다. 이후 스트림은 같은 표로 시작해야 한다.
+            AtomicReference<String> authed = new AtomicReference<>();
             return new ApplicationProtocolConnection() {
                 @Override
                 public void acceptPeerInitiatedStream(QuicStream stream) {
-                    worker.execute(() -> bridge(stream, peer));
+                    worker.execute(() -> bridge(stream, peer, conn, authed));
                 }
             };
         }
