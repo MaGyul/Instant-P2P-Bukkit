@@ -42,7 +42,7 @@ val universalJar by tasks.registering(Jar::class) {
             "assets/instant-p2p-server/**")
     }
 
-    // 이 프로젝트(MIT)와 함께 넣은 라이브러리(kwik·agent15 LGPL-3.0, hkdf Apache-2.0, siphash MIT)의 라이선스·고지
+    // 이 프로젝트(MIT)와 원본 instant-p2p(MIT), 함께 넣은 라이브러리(kwik·agent15 LGPL-3.0, hkdf Apache-2.0, siphash MIT)의 라이선스·고지
     from(rootProject.file("LICENSE")) { into("META-INF") }
     from(rootProject.file("licenses")) { into("META-INF/licenses") }
 
@@ -80,6 +80,7 @@ val checkUniversalJar by tasks.registering {
                 "META-INF/licenses/THIRD-PARTY-NOTICES.txt",
                 "META-INF/licenses/LGPL-3.0.txt",
                 "META-INF/licenses/GPL-3.0.txt",
+                "META-INF/licenses/MIT-instant-p2p.txt",
             ).filterNot(::has).forEach { problems += "없음: $it" }
 
             // paper-plugin.yml이 있으면 Paper와 Spigot 동작이 갈린다

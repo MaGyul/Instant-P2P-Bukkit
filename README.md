@@ -84,7 +84,7 @@ Velocity만 `minecraftVersion`(비우면 첫 백엔드에 ping해서 정함)이 
 
 ## 원본 모드에서 가져온 부분
 
-원본은 CC0로 공개되어 있습니다.
+원본은 MIT 라이선스입니다(2026-09-28 전에는 CC0). 원본의 저작권 고지와 라이선스 전문은 [`licenses/MIT-instant-p2p.txt`](licenses/MIT-instant-p2p.txt)에 있습니다.
 
 | 원본 | 서버 통합판 |
 |---|---|

@@ -1,6 +1,6 @@
 # CLAUDE.md — instant-p2p 서버 통합판
 
-instant-p2p 모드(원본: KITE2459/kfcudp-instant-p2p, CC0)의 **호스트 기능을 서버 쪽으로 옮긴 프로젝트**다.
+instant-p2p 모드(원본: KITE2459/kfcudp-instant-p2p, MIT — 원본 고지는 `licenses/MIT-instant-p2p.txt`)의 **호스트 기능을 서버 쪽으로 옮긴 프로젝트**다.
 모드를 깐 클라이언트가 초대 코드/공개 방 목록으로 서버에 접속한다. **jar 하나**로 Paper/Spigot, Velocity, Fabric(1.21.x, 26.x) 서버를 모두 받는다.
 배경, 원본과의 차이, 설치 방법은 `README.md`에 있다.
 
