@@ -155,7 +155,7 @@
   "instant-p2p.msg.signaling_unreachable": "§c서버 점검 중입니다 §f(시그널링 연결 실패) §c— 재시도 중, 복구까지 접속이 안 될 수 있습니다",
   "instant-p2p.msg.signaling_recovered": "§a시그널링 서버에 다시 연결되었습니다",
   "instant-p2p.msg.ip_restore_unavailable": "§c[instant-p2p] 이 서버 버전에서는 접속자 IP 복원을 할 수 없어 꺼졌습니다. 접속은 정상입니다. 서버 종류·버전과 함께 개발자에게 문의해 주세요.",
-  "instant-p2p-server.usage": "§e/p2p <status|login|logout|open|close|code|newcode|reload>",
+  "instant-p2p-server.usage": "§e/p2p <status|login|logout|open|close|code|newcode|reload|max-players>",
   "instant-p2p-server.status.account": "§7계정: §f%s",
   "instant-p2p-server.status.pending": "§7계정: §e로그인 대기 중 §7(/p2p login 으로 코드 다시 보기)",
   "instant-p2p-server.status.logged_out": "§7계정: §c로그인 안 됨 §7(/p2p login)",
@@ -191,5 +191,18 @@
   "instant-p2p-server.status.players": "§7P2P 접속자 %s명: §f%s",
   "instant-p2p-server.status.players_none": "§7P2P 접속자: 없음",
   "instant-p2p-server.status.direct": "직결",
-  "instant-p2p-server.status.relay": "중계"
+  "instant-p2p-server.status.relay": "중계",
+  "multiplayer.disconnect.server_full": "서버가 꽉 찼습니다!",
+  "instant-p2p-server.status.max_players_on": "§7P2P 최대 인원: §a%s명 §7(서버 정원 %s명)",
+  "instant-p2p-server.status.max_players_off": "§7P2P 최대 인원: §c꺼짐 §7(서버 정원 %s명을 따름, /p2p max-players)",
+  "instant-p2p-server.max_players.usage": "§e/p2p max-players <on|off|set <인원>>",
+  "instant-p2p-server.max_players.need_value": "§c먼저 /p2p max-players set <인원> 으로 인원을 정하세요",
+  "instant-p2p-server.max_players.invalid": "§c인원은 1명 이상이어야 합니다",
+  "instant-p2p-server.max_players.over_server": "§c서버 정원(%s명)보다 크게 정할 수 없습니다",
+  "instant-p2p-server.max_players.on": "§aP2P 최대 인원을 켰습니다 — P2P 접속은 §f%s명§a 기준으로 막습니다",
+  "instant-p2p-server.max_players.off": "§aP2P 최대 인원을 껐습니다 — 서버 정원(%s명)을 따릅니다",
+  "instant-p2p-server.max_players.set": "§aP2P 최대 인원을 §f%s명§a으로 정했습니다",
+  "instant-p2p-server.max_players.set_off": "§aP2P 최대 인원을 §f%s명§a으로 정했습니다 §7(꺼져 있음 — /p2p max-players on)",
+  "instant-p2p-server.max_players.clamped": "§e설정값 %s명이 서버 정원보다 커서 서버 정원(%s명)으로 적용됩니다",
+  "instant-p2p-server.max_players.save_failed": "§c설정 파일에 저장하지 못했습니다: %s §7(바뀐 것 없음)"
 }

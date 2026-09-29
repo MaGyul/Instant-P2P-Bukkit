@@ -166,8 +166,48 @@ class ExpelManagerTest {
         assertFalse(core.canBypassPlayerLimit(SUPPORTER));
     }
 
+    @Test
+    void p2pMaxPlayersBlocksOnlyTunnelJoinsWhenFull() throws Exception {
+        P2PCore core = new P2PCore(platform);
+        core.tunnels().register(new InetSocketAddress("127.0.0.1", 50000), "203.0.113.7", "sid");
+        InetAddress tunnel = InetAddress.getByAddress(new byte[]{(byte) 203, 0, 113, 7});
+        InetAddress direct = InetAddress.getByAddress(new byte[]{(byte) 198, 51, 100, 1});
+        core.onJoin(HOST);
+        core.onJoin(OTHER);
+
+        // 꺼져 있으면 서버 정원(20)을 따른다
+        assertEquals(20, core.maxPlayers());
+        assertFalse(core.isP2PFull(NOBODY, "n", tunnel));
+
+        // 켜면 2명 기준 — 터널 접속만 막고, 개발자·서포터는 예외
+        platform.applySettings(platform.settings().withMaxPlayers(true, 2));
+        assertEquals(2, core.maxPlayers());
+        assertTrue(core.isP2PFull(NOBODY, "n", tunnel));
+        assertTrue(core.isP2PFull(STREAMER, "s", tunnel));
+        assertFalse(core.isP2PFull(DEV, "d", tunnel));
+        assertFalse(core.isP2PFull(SUPPORTER, "s", tunnel));
+        assertFalse(core.isP2PFull(NOBODY, "n", direct));
+        assertFalse(core.isP2PFull(OTHER, "o", tunnel)); // 이미 접속 중(중복 접속)
+
+        // 서버 정원보다 크게 저장돼 있으면 서버 정원으로
+        platform.applySettings(platform.settings().withMaxPlayers(true, 50));
+        assertEquals(20, core.maxPlayers());
+        assertFalse(core.isP2PFull(NOBODY, "n", tunnel));
+
+        // 값이 0(안 정함)이면 켜져 있어도 적용 안 함
+        platform.applySettings(platform.settings().withMaxPlayers(true, 0));
+        assertEquals(20, core.maxPlayers());
+
+        // 서버 정원이 0이면(바닐라가 전원 거부) 모드에 보이는 정원도 0 — 빈자리가 있는 것처럼 보이지 않게
+        platform.serverMax = 0;
+        platform.applySettings(platform.settings().withMaxPlayers(true, 3));
+        assertEquals(0, core.maxPlayers());
+        assertTrue(core.isP2PFull(NOBODY, "n", tunnel));
+    }
+
     private static final class FakePlatform implements P2PPlatform {
         final Set<UUID> online = new HashSet<>();
+        P2PSettings applied;
         final List<String> kicks = new ArrayList<>();
         boolean names = true;
         boolean allowBroadcast;
@@ -183,13 +223,16 @@ class ExpelManagerTest {
         }
 
         @Override public P2PSettings settings() {
+            if (applied != null) return applied;
             return new P2PSettings(true, HOST, "1.2.3", "", "Server", true, List.of("normal"),
                     false, allowBroadcast, 0);
         }
         @Override public P2PSettings loadSettings() { return settings(); }
-        @Override public void applySettings(P2PSettings settings) {}
+        @Override public void applySettings(P2PSettings settings) { applied = settings; }
+        @Override public void saveSettings(java.util.Map<String, Object> values) {}
         @Override public Collection<UUID> bannedPlayers() { return List.of(); }
-        @Override public int maxPlayers() { return 20; }
+        int serverMax = 20;
+        @Override public int maxPlayers() { return serverMax; }
         @Override public String minecraftVersion() { return "1.21.11"; }
         @Override public int listenPort() { return 25565; }
         @Override public Path dataFolder() { return Path.of("build", "test-data"); }

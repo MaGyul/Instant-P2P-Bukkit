@@ -53,6 +53,11 @@ final class FabricPlatform implements P2PPlatform {
     }
 
     @Override
+    public void saveSettings(java.util.Map<String, Object> values) throws Exception {
+        dev.magyul.instantp2p.common.core.JsonSettings.save(dataFolder.resolve("config.json"), values);
+    }
+
+    @Override
     public void applySettings(P2PSettings settings) {
         this.settings = settings;
     }

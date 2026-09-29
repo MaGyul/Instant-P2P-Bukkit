@@ -31,6 +31,7 @@ jar 하나(`instant-p2p-server-<버전>.jar`)를 서버에 넣으면 됩니다. 
 | `/p2p login` / `logout` | 계정 로그인 / 로그아웃(저장된 로그인 정보 삭제, 열려 있으면 닫음) |
 | `/p2p open` / `close` | 방 열기 / 닫기 |
 | `/p2p code` / `newcode` | 초대 코드 보기 / 새로 만들기(열려 있으면 새 코드로 다시 엶) |
+| `/p2p max-players [on\|off\|set <인원>]` | P2P 최대 인원 — 켜면 P2P 접속은 서버 정원 대신 이 인원으로 막음(서버 정원 이하, 설정 파일에 저장) |
 | `/p2p reload` | 설정 파일 다시 읽기 — 열려 있는 방에 바로 반영(`udpPort`는 다시 열어야, `serverUuid`는 재시작해야 적용) |
 
 - 권한: `instantp2p.admin`(기본 op). Fabric은 op 또는 콘솔.
@@ -41,10 +42,13 @@ jar 하나(`instant-p2p-server-<버전>.jar`)를 서버에 넣으면 됩니다. 
 
 ## 설정
 
-설정 키: `enabled`(서버 시작 시 자동으로 열기, 기본 `false`), `serverUuid`(자동 생성), `targetModVersion`, `title`, `name`, `publicRoom`, `channels`, `channelAnd`, `allowBroadcast`, `udpPort`.
+설정 키: `enabled`(서버 시작 시 자동으로 열기, 기본 `false`), `serverUuid`(자동 생성), `targetModVersion`, `title`, `name`, `publicRoom`, `channels`, `channelAnd`, `allowBroadcast`, `udpPort`, `maxPlayersEnabled`, `maxPlayers`.
 Velocity만 `minecraftVersion`(비우면 첫 백엔드에 ping해서 정함)이 더 있습니다.
 
 - `targetModVersion`: 기본 `auto`. 공개 방을 올릴 때 시그널링 서버가 알려주는 최신 배포 버전을 씁니다. 특정 버전 클라이언트에게만 보이게 하려면 `"1.4.3"`처럼 적습니다. 서버판은 모드 1.4.3 이상만 받으므로, 버전 API가 1.4.3 미만을 주면(서버 쪽 갱신 지연) 1.4.3을 씁니다.
+- `maxPlayersEnabled`, `maxPlayers`: P2P 최대 인원(`/p2p max-players`로 바꾸면 여기에 저장). 켜져 있으면 P2P로 들어오는 접속은 전체 접속 인원이
+  `maxPlayers`에 닿았을 때 "서버가 꽉 찼습니다"로 막히고, 모드에 보이는 방 정원도 이 값이 됩니다. 서버 주소로 직접 접속하는 사람은 서버 정원 그대로,
+  개발자·서포터는 정원 초과 입장처럼 예외입니다. 서버 정원보다 크게 정할 수 없고, 나중에 서버 정원을 줄이면 서버 정원이 적용됩니다.
 - `udpPort`: QUIC이 쓸 UDP 포트. 기본 `0`은 실행할 때마다 임의 포트입니다. 방화벽이 있는 서버라면 포트를 정해 UDP로 열어 두면 중계 없이 직결되는 경우가 늘어납니다.
   다른 UDP 용도(`enable-query`의 25565, Simple Voice Chat 24454, Geyser 19132)와 겹치지 않게 하세요. 이미 쓰이는 포트면 경고를 남기고 임의 포트로 엽니다.
 

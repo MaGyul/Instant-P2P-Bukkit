@@ -118,9 +118,13 @@ public final class VelocityEntry {
     @Subscribe
     public void onLogin(LoginEvent event) {
         if (core == null) return;
-        if (!core.onPreLogin(event.getPlayer().getUniqueId())) {
+        Player player = event.getPlayer();
+        if (!core.onPreLogin(player.getUniqueId())) {
             event.setResult(LoginEvent.ComponentResult.denied(
                     VelocityText.translatable("instant-p2p.msg.still_expelled")));
+        } else if (core.isP2PFull(player.getUniqueId(), player.getUsername(), player.getRemoteAddress().getAddress())) {
+            // 프록시에는 정원 검사가 없다 — P2P 최대 인원만 여기서 막는다
+            event.setResult(LoginEvent.ComponentResult.denied(VelocityText.translatable(P2PCore.SERVER_FULL)));
         }
     }
 

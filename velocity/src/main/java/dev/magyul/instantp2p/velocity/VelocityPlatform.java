@@ -66,6 +66,11 @@ final class VelocityPlatform implements P2PPlatform {
     private volatile String pendingVersion;
 
     @Override
+    public void saveSettings(java.util.Map<String, Object> values) throws Exception {
+        dev.magyul.instantp2p.common.core.JsonSettings.save(dataFolder.resolve(VelocityEntry.CONFIG_FILE), values);
+    }
+
+    @Override
     public void applySettings(P2PSettings settings) {
         this.settings = settings;
         String v = pendingVersion;

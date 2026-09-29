@@ -7,6 +7,8 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -35,7 +37,28 @@ final class PaperSettings {
                 config.getStringList("channels"),
                 config.getBoolean("channelAnd", false),
                 config.getBoolean("allowBroadcast", false),
-                config.getInt("udpPort", 0));
+                config.getInt("udpPort", 0),
+                config.getBoolean("maxPlayersEnabled", false),
+                config.getInt("maxPlayers", 0));
+    }
+
+    /**
+     * 주어진 키만 바꿔 저장한다({@code /p2p max-players}). 파일을 다시 파싱해서 바꾸므로 다른 값과 주석은 그대로 남는다
+     * (1.18.1+ YamlConfiguration은 주석을 보존). 문법 오류면 예외, 파일 무변경.
+     */
+    static void save(JavaPlugin plugin, Map<String, Object> values) throws IOException, InvalidConfigurationException {
+        File file = new File(plugin.getDataFolder(), "config.yml");
+        YamlConfiguration config = new YamlConfiguration();
+        config.load(file);
+        boolean addComment = !config.contains("maxPlayersEnabled") && values.containsKey("maxPlayersEnabled");
+        values.forEach(config::set);
+        if (addComment) {
+            // 1.1.0 이전 config.yml에는 이 키가 없다 — 끝에 붙으므로 설명을 달아 둔다
+            config.setComments("maxPlayersEnabled", List.of(
+                    "P2P 최대 인원 (/p2p max-players on|off|set <인원>) — 켜면 P2P 접속은 서버 정원 대신 maxPlayers 기준으로 막습니다",
+                    "maxPlayers는 서버 정원(max-players)보다 클 수 없습니다"));
+        }
+        config.save(file);
     }
 
     /** 서버 고유 UUID (없으면 랜덤으로 생성 후 저장) */

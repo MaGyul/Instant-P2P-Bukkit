@@ -90,6 +90,13 @@ public final class FabricImpl implements FabricEntry.Impl {
             }
             return ok;
         });
+        // P2P 최대 인원: 바닐라가 받아 준 터널 접속을 P2P 정원 기준으로 막는다 (로그 중복은 P2PCore가 거른다)
+        PlayerLimitBypass.setDenial((address, profile) -> {
+            UUID id = Profiles.id(profile);
+            if (id == null || !(address instanceof InetSocketAddress isa)) return null;
+            return core.isP2PFull(id, Profiles.name(profile), isa.getAddress())
+                    ? FabricText.translatable(P2PCore.SERVER_FULL) : null;
+        });
 
         // 로그인 전 검사: 추방 상태면 설정 단계에서 끊는다 (월드에 들어오기 전)
         ServerConfigurationConnectionEvents.CONFIGURE.register((handler, server) -> {
@@ -143,6 +150,7 @@ public final class FabricImpl implements FabricEntry.Impl {
 
     private void onStopping() {
         PlayerLimitBypass.set(null);
+        PlayerLimitBypass.setDenial(null);
         TunnelInjector.uninject();
         core.tunnels().clear();
         core.host().shutdown();

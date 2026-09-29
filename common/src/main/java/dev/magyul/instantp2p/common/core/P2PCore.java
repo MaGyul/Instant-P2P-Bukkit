@@ -9,6 +9,8 @@ import dev.magyul.instantp2p.common.tunnel.TunnelRegistry;
 import dev.magyul.instantp2p.common.core.ExpelManager;
 import dev.magyul.instantp2p.common.signaling.Roles;
 import dev.magyul.instantp2p.common.core.P2PBridge;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.InetAddress;
 import java.util.Collection;
@@ -26,6 +28,11 @@ import java.util.concurrent.ConcurrentHashMap;
  * 나가는데, 플랫폼의 온라인 목록은 서버 스레드 밖에서 안전하게 읽을 수 있다는 보장이 없다.
  */
 public final class P2PCore {
+
+    private static final Logger LOG = LoggerFactory.getLogger("Instant-P2P");
+
+    /** P2P 최대 인원이 찼을 때 입장 거부 사유 — 바닐라 키라 클라이언트가 자기 언어로 보여 준다. */
+    public static final String SERVER_FULL = "multiplayer.disconnect.server_full";
 
     /** IP 복원(TunnelInjector)을 못 하게 됐을 때 관리자에게 보내는 번역 키 */
     public static final String IP_RESTORE_UNAVAILABLE = "instant-p2p.msg.ip_restore_unavailable";
@@ -116,12 +123,51 @@ public final class P2PCore {
         return at != null && System.currentTimeMillis() - at <= TUNNEL_LOGIN_TTL_MS && DevBadge.hasPerk(player);
     }
 
+    /**
+     * 모드에 보이는 정원(room_state, 공개 방) — P2P 최대 인원이 켜져 있으면 그 값(서버 정원을 넘지 않게), 아니면 서버 정원.
+     */
+    public int maxPlayers() {
+        int server = platform.maxPlayers();
+        P2PSettings s = platform.settings();
+        if (!s.limitsMaxPlayers()) return server;
+        return Math.min(s.maxPlayers(), server);
+    }
+
+    /** P2P 최대 인원 초과 거부 로그 — 정원 검사가 한 입장에 두 번 불리는 플랫폼(Fabric)이 있어 한 번만 */
+    private final Map<UUID, Long> fullLogged = new ConcurrentHashMap<>();
+
+    /**
+     * P2P 최대 인원이 켜져 있고 찼으면 true — 플랫폼이 서버 정원 초과({@link #SERVER_FULL})로 입장을 거부한다.
+     * 터널로 들어오는 접속만 막고(서버 주소로 직접 접속하면 서버 정원을 따름), 개발자·서포터는 정원 초과 입장처럼 예외.
+     * 인원은 서버 전체 접속자 수(모드 목록에 보이는 인원과 같은 기준).
+     */
+    public boolean isP2PFull(UUID player, String name, InetAddress address) {
+        if (!platform.settings().limitsMaxPlayers()) return false;
+        if (address == null || !tunnels.hasPeerAddress(address)) return false;
+        if (onlinePlayers.contains(player)) return false; // 중복 접속은 서버가 기존 접속을 끊고 받는다
+        int max = maxPlayers();
+        if (onlinePlayers.size() < max) return false;
+        if (DevBadge.hasPerk(player)) return false;
+        long now = System.currentTimeMillis();
+        fullLogged.values().removeIf(t -> now - t > 30_000);
+        if (fullLogged.putIfAbsent(player, now) == null) {
+            LOG.info("[host] P2P 최대 인원({}명)이 차서 입장 거부: {}", max, name != null ? name : player);
+        }
+        return true;
+    }
+
+    /** 서버 스레드. P2P 최대 인원이 바뀌었다 — 모드에 보이는 정원을 다시 알린다. */
+    public void onMaxPlayersChanged() {
+        broadcastRoomState();
+        bridge.updatePublicRoomPlayerCount(onlinePlayers.size(), maxPlayers());
+    }
+
     /** 서버 스레드. 입장 완료. */
     public void onJoin(UUID player) {
         tunnelLogins.remove(player);
         onlinePlayers.add(player);
         broadcastRoomState();
-        bridge.updatePublicRoomPlayerCount(onlinePlayers.size(), platform.maxPlayers());
+        bridge.updatePublicRoomPlayerCount(onlinePlayers.size(), maxPlayers());
     }
 
     /** 서버 스레드. 퇴장 — 이 시점엔 플랫폼 온라인 목록에 아직 남아 있으므로 방 상태는 다음 틱에 보낸다. */
@@ -131,7 +177,7 @@ public final class P2PCore {
         onlinePlayers.remove(player);
         platform.runSync(() -> {
             broadcastRoomState();
-            bridge.updatePublicRoomPlayerCount(onlinePlayers.size(), platform.maxPlayers());
+            bridge.updatePublicRoomPlayerCount(onlinePlayers.size(), maxPlayers());
         });
     }
 
@@ -146,7 +192,7 @@ public final class P2PCore {
     /** 서버 스레드. 방 상태(정원, 호스트, 방송 허용, 등급)를 접속자 전원에게 보낸다. */
     public void broadcastRoomState() {
         P2PSettings settings = platform.settings();
-        RoomState packet = new RoomState(platform.maxPlayers(), settings.serverUuid(),
+        RoomState packet = new RoomState(maxPlayers(), settings.serverUuid(),
                 settings.allowBroadcast(), rankMap(onlinePlayers));
         PacketByteBuf buf = PacketByteBuf.allocate();
         packet.write(buf);

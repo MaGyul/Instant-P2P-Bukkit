@@ -23,9 +23,16 @@ public interface P2PPlatform {
     /** 서버 스레드. {@link #settings()}가 이 값을 돌려주게 바꾼다. */
     void applySettings(P2PSettings settings);
 
+    /**
+     * 서버 스레드. 설정 파일에서 주어진 키만 바꿔 저장한다(다른 값·주석은 그대로) — {@code /p2p max-players}.
+     * 적용은 하지 않는다({@link #applySettings}). 파일을 못 읽으면(문법 오류 등) 예외, 파일 무변경.
+     */
+    void saveSettings(java.util.Map<String, Object> values) throws Exception;
+
     /** 서버에서 밴된 플레이어 UUID — 공개 방 announce에 해시로 실린다. 스냅샷을 돌려준다. */
     Collection<UUID> bannedPlayers();
 
+    /** 서버 정원 (Velocity는 show-max-players). P2P 최대 인원이 적용된 값은 {@link P2PCore#maxPlayers()}. */
     int maxPlayers();
 
     /** room_update.version — 클라이언트가 문자열 비교하므로 실제 서버 MC 버전이어야 한다. 아직 모르면 null(Velocity). */

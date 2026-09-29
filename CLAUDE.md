@@ -75,7 +75,8 @@ MC 버전은 `Bukkit.getBukkitVersion()`(`getMinecraftVersion()`은 Paper 전용
   (`NameAndId.id()` = `comp_4422`, 1.21.11 정원 초과 입장이 안 되던 원인). authlib `GameProfile`은 난독화되지 않아 이름으로 되지만,
   MC 쪽은 반환 타입으로 찾는다(`Profiles.id/name`).
 - 정원 검사(`canPlayerLogin`)는 로그인·설정 단계에서 두 번 불린다(Paper도 같음) — 로그는 한 번만.
-- **Mixin은 정원 초과 입장 하나뿐**(`mixin.v1_21/v26.PlayerListMixin`, `PlayerList.canPlayerLogin`에서 `canBypassPlayerLimit` 호출 직전 → null 반환 = 허용).
+- **Mixin은 `PlayerList.canPlayerLogin` 하나뿐**(`mixin.v1_21/v26.PlayerListMixin`): 정원 초과 입장(`canBypassPlayerLimit` 호출 직전 → null 반환 = 허용)과
+  P2P 최대 인원(RETURN에서 바닐라가 null이면 `PlayerLimitBypass.deny`의 Component로 거부).
   설정(`instant-p2p-server.mixins.json`)의 목록은 비워 두고 `MixinPlugin.getMixins()`가 MC 버전으로 하나만 등록한다(`FabricEntry.implPackage`와 같은 기준).
   1.21.x판은 intermediary 문자열(`class_3324`/`method_14586`/`method_14609`, 1.21.0~1.21.11 공통) + `remap = false` — refmap은 디스크립터까지 고정하는데
   1.21.9에 인자가 GameProfile → NameAndId로 바뀌어서 쓸 수 없다. 인자는 `@Coerce Object`. 판정은 MC 타입 없는 `PlayerLimitBypass`를 거쳐 구현이 넣는다.
@@ -109,7 +110,7 @@ v1_21=intermediary·v26=Mojang 이름을 검사한다.
 - 지원 범위는 MC 1.21 이상(원본 모드 최소 버전). MC 버전 문자열은 런타임에 얻는다.
 
 - `enabled`: **서버 시작 시 자동으로 열기**(기본 false). 꺼져 있어도 플러그인은 켜지고 `/p2p open`으로 연다. 로그인 전이면 안내만.
-- `/p2p status|login|logout|open|close|code|newcode|reload` — 권한 `instantp2p.admin`(Fabric은 op/콘솔). 플레이어에게는 초대·로그인 코드를
+- `/p2p status|login|logout|open|close|code|newcode|reload|max-players` — 권한 `instantp2p.admin`(Fabric은 op/콘솔). 플레이어에게는 초대·로그인 코드를
   숨기고 클릭 복사 버튼으로 보낸다(방송 대비, 로그인 코드도 먼저 입력한 사람 계정이 로그인되므로 가린다). 콘솔은 평문.
 - `reload`: `P2PPlatform.loadSettings/applySettings`, 반영은 `HostController.reload` — 공개 방 값이 바뀌면 내렸다 다시 올리고,
   allowBroadcast면 room_state 재전송. `udpPort`는 안내만(자동 재오픈은 접속자를 끊음),
@@ -118,8 +119,12 @@ v1_21=intermediary·v26=Mojang 이름을 검사한다.
   (홈에 못 쓰면 데이터 폴더 `.account.key` + 경고). 갱신 토큰은 쓸 때마다 새 값으로 저장, `invalid_grant`면 지운다. 토큰 값은 로그 금지.
   앱 ID는 마인월드 런처(`MicrosoftAuth.CLIENT_ID`, `-Dinstantp2p.auth.clientId`로 변경) — Minecraft API 승인 + 공용 클라이언트 흐름 허용.
 
-설정 키: `enabled`, `serverUuid`, `targetModVersion`, `title`, `name`, `publicRoom`, `channels`, `channelAnd`, `allowBroadcast`, `udpPort`
-(Velocity만 `minecraftVersion` 추가).
+설정 키: `enabled`, `serverUuid`, `targetModVersion`, `title`, `name`, `publicRoom`, `channels`, `channelAnd`, `allowBroadcast`, `udpPort`,
+`maxPlayersEnabled`, `maxPlayers` (Velocity만 `minecraftVersion` 추가).
+- `max-players`(1.1.0): 켜져 있으면 **터널 접속만** 전체 접속자 수(`P2PCore` 집합)가 `P2PCore.maxPlayers()`(= min(설정값, 서버 정원))에 닿으면
+  바닐라 `multiplayer.disconnect.server_full`로 거부(`P2PCore.isP2PFull`), 개발자·서포터는 예외. room_state·공개 방 정원도 이 값.
+  명령은 `P2PPlatform.saveSettings`로 해당 키만 파일에 쓰고(Paper는 YamlConfiguration 재파싱 → 주석 보존, 문법 오류면 예외·무변경) 적용한다.
+  거부 위치: Paper/Spigot `AsyncPlayerPreLoginEvent`(KICK_FULL), Velocity `LoginEvent`, Fabric은 `canPlayerLogin` RETURN Mixin(바닐라 검사 통과 후).
 - `targetModVersion`: 기본 `auto` — 공개 방 로비에 접속할 때 시그널링 `/api/v1/version`의 `current`를 받는다(`signaling/ModVersion`).
   성공값은 announce를 멈출 때까지 재사용, 실패하거나 1.4.3 미만(버전 API 갱신 지연)이면 `1.4.3`으로 올리고 다음 재접속 때 다시 묻는다. 폴링하지 않는다(실행 중 새 버전이 나오면 재시작해야 반영).
 - `udpPort`: QUIC UDP 포트, 기본 0(임의). 이미 쓰이면 경고 후 임의 포트. 방화벽에서 열어 두면 직결이 잘 된다.

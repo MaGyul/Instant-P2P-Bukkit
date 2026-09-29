@@ -27,4 +27,13 @@ public abstract class PlayerListMixin {
                                               CallbackInfoReturnable<Object> cir) {
         if (PlayerLimitBypass.test(address, profile)) cir.setReturnValue(null);
     }
+
+    /** 바닐라 검사(밴·화이트리스트·정원)를 모두 통과했을 때 — P2P 최대 인원이 찼으면 거부 사유를 돌려준다. */
+    @Inject(method = "method_14586", at = @At("RETURN"), cancellable = true, remap = false)
+    private void instantp2p$p2pMaxPlayers(SocketAddress address, @Coerce Object profile,
+                                          CallbackInfoReturnable<Object> cir) {
+        if (cir.getReturnValue() != null) return;
+        Object reason = PlayerLimitBypass.deny(address, profile);
+        if (reason != null) cir.setReturnValue(reason);
+    }
 }

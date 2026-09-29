@@ -155,7 +155,7 @@
   "instant-p2p.msg.signaling_unreachable": "§cServer maintenance §f(signaling failed) §c- retrying; players may not connect until it recovers",
   "instant-p2p.msg.signaling_recovered": "§aReconnected to the signaling server",
   "instant-p2p.msg.ip_restore_unavailable": "§c[instant-p2p] Player IP restoration is not supported on this server version and has been disabled. Connections still work. Please report this to the developer with your server type and version.",
-  "instant-p2p-server.usage": "§e/p2p <status|login|logout|open|close|code|newcode|reload>",
+  "instant-p2p-server.usage": "§e/p2p <status|login|logout|open|close|code|newcode|reload|max-players>",
   "instant-p2p-server.status.account": "§7Account: §f%s",
   "instant-p2p-server.status.pending": "§7Account: §ewaiting for login §7(/p2p login to see the code again)",
   "instant-p2p-server.status.logged_out": "§7Account: §cnot logged in §7(/p2p login)",
@@ -191,5 +191,18 @@
   "instant-p2p-server.status.players": "§7P2P players (%s): §f%s",
   "instant-p2p-server.status.players_none": "§7P2P players: none",
   "instant-p2p-server.status.direct": "direct",
-  "instant-p2p-server.status.relay": "relay"
+  "instant-p2p-server.status.relay": "relay",
+  "multiplayer.disconnect.server_full": "The server is full!",
+  "instant-p2p-server.status.max_players_on": "§7P2P max players: §a%s §7(server limit %s)",
+  "instant-p2p-server.status.max_players_off": "§7P2P max players: §coff §7(follows the server limit of %s, /p2p max-players)",
+  "instant-p2p-server.max_players.usage": "§e/p2p max-players <on|off|set <players>>",
+  "instant-p2p-server.max_players.need_value": "§cSet a value first with /p2p max-players set <players>",
+  "instant-p2p-server.max_players.invalid": "§cThe value must be at least 1",
+  "instant-p2p-server.max_players.over_server": "§cCannot be larger than the server limit (%s)",
+  "instant-p2p-server.max_players.on": "§aP2P max players on — P2P joins are limited to §f%s",
+  "instant-p2p-server.max_players.off": "§aP2P max players off — following the server limit (%s)",
+  "instant-p2p-server.max_players.set": "§aP2P max players set to §f%s",
+  "instant-p2p-server.max_players.set_off": "§aP2P max players set to §f%s §7(currently off — /p2p max-players on)",
+  "instant-p2p-server.max_players.clamped": "§eThe configured %s is above the server limit, so the server limit (%s) applies",
+  "instant-p2p-server.max_players.save_failed": "§cCould not save the config file: %s §7(nothing changed)"
 }

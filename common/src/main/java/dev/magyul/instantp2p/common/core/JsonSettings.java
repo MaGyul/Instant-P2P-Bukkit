@@ -14,6 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -47,6 +48,8 @@ public final class JsonSettings {
         boolean allowBroadcast = bool(json, "allowBroadcast", false);
         List<String> channels = strings(json, "channels", List.of("normal"));
         boolean channelAnd = bool(json, "channelAnd", false);
+        boolean maxPlayersEnabled = bool(json, "maxPlayersEnabled", false);
+        int maxPlayers = integer(json, "maxPlayers", 0);
         String serverUuid = string(json, "serverUuid", "");
         if (serverUuid.isEmpty()) {
             serverUuid = UUID.randomUUID().toString();
@@ -61,7 +64,30 @@ public final class JsonSettings {
         }
 
         return new P2PSettings(enabled, UUID.fromString(serverUuid), targetModVersion, title, name, publicRoom,
-                channels, channelAnd, allowBroadcast, udpPort);
+                channels, channelAnd, allowBroadcast, udpPort, maxPlayersEnabled, maxPlayers);
+    }
+
+    /** 키 몇 개만 바꿔 저장한다({@code /p2p max-players}). 다른 키는 그대로. 파일을 못 읽으면 예외, 파일 무변경. */
+    public static void save(Path file, Map<String, Object> values) throws IOException {
+        JsonObject json = new JsonObject();
+        if (Files.exists(file)) {
+            try (Reader r = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+                JsonObject read = GSON.fromJson(r, JsonObject.class);
+                if (read != null) json = read;
+            } catch (com.google.gson.JsonParseException e) {
+                throw new IOException(e.getMessage(), e);
+            }
+        }
+        JsonObject out = json;
+        values.forEach((key, value) -> {
+            if (value instanceof Boolean b) out.addProperty(key, b);
+            else if (value instanceof Number n) out.addProperty(key, n);
+            else out.addProperty(key, String.valueOf(value));
+        });
+        Files.createDirectories(file.getParent());
+        try (Writer w = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
+            GSON.toJson(json, w);
+        }
     }
 
     /** 플랫폼 전용 문자열 키 (예: Velocity의 minecraftVersion). 없으면 기본값을 채워 저장한다. */

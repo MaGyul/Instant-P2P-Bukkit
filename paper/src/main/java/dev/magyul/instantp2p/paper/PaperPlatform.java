@@ -42,6 +42,11 @@ final class PaperPlatform implements P2PPlatform {
     }
 
     @Override
+    public void saveSettings(java.util.Map<String, Object> values) throws Exception {
+        PaperSettings.save(plugin, values);
+    }
+
+    @Override
     public void applySettings(P2PSettings settings) {
         this.settings = settings;
     }

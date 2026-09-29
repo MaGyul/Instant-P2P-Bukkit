@@ -4,11 +4,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.SocketAddress;
+import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 
 /**
- * 정원 초과 입장 훅 — Mixin({@code mixin.v1_21/v26.PlayerListMixin})이 바닐라 정원 검사 직전에 부르고,
- * 구현({@code FabricImpl})이 판정 로직을 넣는다. MC 타입이 없는 이 클래스를 거쳐 버전별 Mixin과 구현이 서로를 모르게 한다.
+ * 정원 훅 — Mixin({@code mixin.v1_21/v26.PlayerListMixin})이 부르고 구현({@code FabricImpl})이 판정을 넣는다.
+ * <ul>
+ *   <li>정원 초과 입장: 바닐라 정원 검사 직전 ({@link #test})</li>
+ *   <li>P2P 최대 인원: 바닐라 검사를 모두 통과한 뒤 ({@link #deny})</li>
+ * </ul>
+ * MC 타입이 없는 이 클래스를 거쳐 버전별 Mixin과 구현이 서로를 모르게 한다.
  */
 public final class PlayerLimitBypass {
 
@@ -16,6 +21,7 @@ public final class PlayerLimitBypass {
     private static final BiPredicate<SocketAddress, Object> NONE = (address, profile) -> false;
 
     private static volatile BiPredicate<SocketAddress, Object> check = NONE;
+    private static volatile BiFunction<SocketAddress, Object, Object> denial = (address, profile) -> null;
 
     private PlayerLimitBypass() {}
 
@@ -31,6 +37,21 @@ public final class PlayerLimitBypass {
         } catch (RuntimeException e) {
             LOGGER.warn("[host] 정원 초과 입장 판정 실패: {}", e.toString());
             return false;
+        }
+    }
+
+    /** @param denial (접속 주소, GameProfile 또는 NameAndId) → 거부 사유 Component, 받으면 null. null이면 끈다. */
+    public static void setDenial(BiFunction<SocketAddress, Object, Object> denial) {
+        PlayerLimitBypass.denial = denial != null ? denial : (address, profile) -> null;
+    }
+
+    /** 서버 스레드(로그인 처리). 바닐라가 받아 준 접속을 막을 사유(Component) 또는 null. 예외가 나면 null(바닐라대로). */
+    public static Object deny(SocketAddress address, Object profile) {
+        try {
+            return denial.apply(address, profile);
+        } catch (RuntimeException e) {
+            LOGGER.warn("[host] P2P 최대 인원 판정 실패: {}", e.toString());
+            return null;
         }
     }
 }

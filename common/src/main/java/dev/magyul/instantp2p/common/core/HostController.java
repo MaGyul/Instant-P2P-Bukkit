@@ -180,6 +180,9 @@ public final class HostController {
         core.platform().applySettings(fresh);
         LOG.info("설정을 다시 불러왔습니다");
         sender.send(K + "reload.done");
+        if (fresh.limitsMaxPlayers() != old.limitsMaxPlayers() || fresh.maxPlayers() != old.maxPlayers()) {
+            core.onMaxPlayersChanged();
+        }
 
         if (state == RoomState.CLOSED) return;
         if (fresh.udpPort() != old.udpPort()) sender.send(K + "reload.udp_port");
@@ -201,7 +204,7 @@ public final class HostController {
         if (core.platform().minecraftVersion() == null) return; // 버전을 알아야 목록에서 호환으로 보인다
         String title = settings.title().isEmpty() ? core.platform().motd() : settings.title();
         core.bridge().publishPublicRoom(code, title, settings.name(), settings.serverUuid().toString(),
-                core.onlinePlayers().size(), core.platform().maxPlayers());
+                core.onlinePlayers().size(), core.maxPlayers());
     }
 
     // ── 실제 작업 (executor 스레드) ────────────────────────────────────────────

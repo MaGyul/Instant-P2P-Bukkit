@@ -24,6 +24,8 @@ final class InstantP2pListener implements Listener {
     public void onPreLogin(AsyncPlayerPreLoginEvent event) {
         if (!core.onPreLogin(event.getUniqueId(), event.getAddress())) {
             text.disallow(event, AsyncPlayerPreLoginEvent.Result.KICK_OTHER, "instant-p2p.msg.still_expelled");
+        } else if (core.isP2PFull(event.getUniqueId(), event.getName(), event.getAddress())) {
+            text.disallow(event, AsyncPlayerPreLoginEvent.Result.KICK_FULL, P2PCore.SERVER_FULL);
         }
     }
 

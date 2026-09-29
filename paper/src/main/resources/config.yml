@@ -24,5 +24,11 @@ channels:
 # true면 위 채널을 모두 함께(AND) 고른 사람에게만 보입니다 (false면 하나라도 겹치면 보임)
 channelAnd: false
 
+# P2P 최대 인원 (/p2p max-players on|off|set <인원> 으로도 바꿀 수 있습니다)
+# 켜면 P2P로 들어오는 접속은 서버 정원(max-players) 대신 maxPlayers 기준으로 막습니다 (서버 주소로 직접 접속은 서버 정원 그대로)
+# 모드의 방 정원 표시도 이 값이 됩니다. maxPlayers는 서버 정원보다 클 수 없습니다
+maxPlayersEnabled: false
+maxPlayers: 0
+
 # 서버 고유 UUID (자동으로 채워집니다 — 로그인 정보 암호화에도 쓰이므로 바꾸지 마세요)
 serverUuid: ""
