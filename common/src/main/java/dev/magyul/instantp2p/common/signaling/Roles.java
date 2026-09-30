@@ -104,7 +104,7 @@ public final class Roles {
     /** @return 목록이 실제로 바뀌었으면 true(실패·무변화는 false). */
     private static boolean refreshNow() {
         try {
-            HttpRequest req = HttpRequest.newBuilder(URI.create(P2PConfig.SIGNALING_HTTP_URL + "/api/v1/roles"))
+            HttpRequest req = HttpRequest.newBuilder(URI.create(P2PConfig.officialHttpUrl() + "/api/v1/roles"))
                     .timeout(HTTP_TIMEOUT)
                     .GET()
                     .build();

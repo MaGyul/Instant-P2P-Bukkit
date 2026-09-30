@@ -17,22 +17,51 @@ public final class P2PConfig {
     public static final int MAX_CHANNEL_LENGTH = 24;
     public static final int PUBLIC_ROOM_SHARD_COUNT = 4;
 
+    /** 지금 방을 올리는 서버 — 설정(signalingServer)이 바뀌면 {@code P2PCore.applySettings}가 고친다. */
+    private static volatile SignalingServer server = SignalingServer.OFFICIAL;
+
+    public static SignalingServer server() {
+        return server;
+    }
+
+    public static void useServer(SignalingServer s) {
+        server = s != null ? s : SignalingServer.OFFICIAL;
+    }
+
     /**
      * mc-signaling — TLS(wss). 원본 1.4부터 평문 8090은 닫혔다(지문·후보·토큰이 그대로 보이므로).
-     * {@link WebSocketClient}는 wss일 때 인증서 도메인까지 확인한다. {@code -Dkfcudp.signaling}으로 바꿀 수 있다.
+     * {@link WebSocketClient}는 wss일 때 인증서를 확인한다. {@code -Dkfcudp.signaling}으로 바꿀 수 있다(테스트용, 서버 선택보다 우선).
      */
-    public static final String SIGNALING_URL =
-            System.getProperty("kfcudp.signaling", "wss://kite-private-cloud.kro.kr");
-    public static final String SIGNALING_HTTP_URL =
-            SIGNALING_URL.startsWith("wss://") ? "https://" + SIGNALING_URL.substring(6)
-                    : SIGNALING_URL.startsWith("ws://") ? "http://" + SIGNALING_URL.substring(5)
-                      : SIGNALING_URL;
+    public static String signalingUrl() {
+        return System.getProperty("kfcudp.signaling", server.signalingUrl());
+    }
+
+    public static String signalingHttpUrl() {
+        return toHttp(signalingUrl());
+    }
+
+    /**
+     * 역할(roles) 조회는 서버 선택과 관계없이 <b>공식 서버</b>에서 — 응답은 공식 서버 개인키로 서명돼 있고
+     * ({@link Roles}), 가맹점 서버는 서명 없는 다른 목록을 준다(2026-09-30 확인).
+     */
+    public static String officialHttpUrl() {
+        return toHttp(System.getProperty("kfcudp.signaling", SignalingServer.OFFICIAL.signalingUrl()));
+    }
+
+    private static String toHttp(String ws) {
+        return ws.startsWith("wss://") ? "https://" + ws.substring(6)
+                : ws.startsWith("ws://") ? "http://" + ws.substring(5)
+                  : ws;
+    }
 
     /** 1.4 전용 coturn(3490, 임시 계정 방식) */
-    public static final String STUN_URL =
-            System.getProperty("kfcudp.stun", "stun:kite-private-cloud.kro.kr:3490");
-    public static final String TURN_URL =
-            System.getProperty("kfcudp.turn", "turn:kite-private-cloud.kro.kr:3490");
+    public static String stunUrl() {
+        return System.getProperty("kfcudp.stun", server.stunUrl());
+    }
+
+    public static String turnUrl() {
+        return System.getProperty("kfcudp.turn", server.turnUrl());
+    }
 
     /**
      * TURN 계정 — <b>기본값이 없다</b>. 방장 계정 인증을 거쳐 시그널링에서 받는다({@code HostAccount.turnCredentials}).

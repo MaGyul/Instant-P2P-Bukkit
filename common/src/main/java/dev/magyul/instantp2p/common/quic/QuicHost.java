@@ -2,6 +2,7 @@ package dev.magyul.instantp2p.common.quic;
 
 import dev.magyul.instantp2p.common.Utils;
 import dev.magyul.instantp2p.common.core.P2PCore;
+import dev.magyul.instantp2p.common.signaling.HardwareId;
 import dev.magyul.instantp2p.common.signaling.P2PConfig;
 import dev.magyul.instantp2p.common.signaling.VillasMsg;
 import dev.magyul.instantp2p.common.signaling.WebSocketClient;
@@ -162,7 +163,7 @@ public final class QuicHost {
         // TURN 계정은 방장 계정 인증으로 받는다. 못 받으면 중계 없이(직결만) 간다.
         String[] turn = core.account().turnCredentials();
         if (turn != null) {
-            agent.enableTurn(P2PConfig.TURN_URL, turn[0], turn[1]);
+            agent.enableTurn(P2PConfig.turnUrl(), turn[0], turn[1]);
         } else {
             LOG.warn("[turn] 중계 계정이 없어 중계 없이 엽니다 (직결만 가능)");
         }
@@ -206,12 +207,12 @@ public final class QuicHost {
     private QuicIce openIce(int port) throws SocketException {
         if (port != 0) {
             try {
-                return new QuicIce(P2PConfig.STUN_URL, false, port);
+                return new QuicIce(P2PConfig.stunUrl(), false, port);
             } catch (SocketException e) {
                 LOG.warn("[quic-host] UDP {} 포트를 열 수 없다({}) — 임의 포트로 연다", port, e.getMessage());
             }
         }
-        return new QuicIce(P2PConfig.STUN_URL, false, 0);
+        return new QuicIce(P2PConfig.stunUrl(), false, 0);
     }
 
     private static void preload(Class<?>... classes) {
@@ -230,8 +231,9 @@ public final class QuicHost {
         // 토큰은 붙을 때마다 다시 받는다 — 방이 토큰 수명(12시간)보다 오래 열려 있어도 재접속이 막히지 않게
         // (남은 시간이 넉넉하면 네트워크 없이 그대로 준다)
         String token = core.account().publishTokenOrNull();
-        String url = P2PConfig.SIGNALING_URL + "/rv/" + roomId + "/host?key=" + hostKey
-                + (token != null ? "&token=" + URLEncoder.encode(token, StandardCharsets.UTF_8) : "");
+        String url = P2PConfig.signalingUrl() + "/rv/" + roomId + "/host?key=" + hostKey
+                + (token != null ? "&token=" + URLEncoder.encode(token, StandardCharsets.UTF_8) : "")
+                + HardwareId.query(); // 가맹점 서버일 때만 붙는다(가맹점 수정판과 같게)
         WebSocketClient ws = new WebSocketClient(url) {
             @Override public void onConnected() {
                 backoffMs = INITIAL_BACKOFF_MS;
@@ -414,7 +416,7 @@ public final class QuicHost {
     }
 
     private boolean isTurnServer(String ip) {
-        InetSocketAddress turn = TurnAllocation.parseUrl(P2PConfig.TURN_URL);
+        InetSocketAddress turn = TurnAllocation.parseUrl(P2PConfig.turnUrl());
         return turn != null && turn.getAddress() != null && turn.getAddress().getHostAddress().equals(ip);
     }
 

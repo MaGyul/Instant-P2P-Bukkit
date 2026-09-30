@@ -28,6 +28,10 @@ final class Compat {
         return click(ClickEvent.Action.OPEN_URL, url);
     }
 
+    static ClickEvent runCommand(String command) {
+        return click(ClickEvent.Action.RUN_COMMAND, command);
+    }
+
     /**
      * ClickEvent는 1.21.5에 클래스({@code new ClickEvent(Action, String)}) → 인터페이스 + 동작별 record
      * ({@code CopyToClipboard(String)}, {@code OpenUrl(URI)})로 바뀌었다. 이 모듈은 1.21.11로 컴파일하지만 1.21.0에서도

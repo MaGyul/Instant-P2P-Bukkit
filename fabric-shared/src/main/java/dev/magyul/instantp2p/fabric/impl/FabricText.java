@@ -26,11 +26,17 @@ final class FabricText {
             comps[i] = arg(args[i]);
         }
         if (key.startsWith(SERVER_KEYS)) return filled(fallback, comps);
+        fallback = I18n.plainFallback(key); // 머리말은 번역 컴포넌트 바깥에 (클라이언트가 번역해도 남게)
         MutableComponent c = Component.translatableWithFallback(key, I18n.stripLegacy(fallback), comps);
         char code = I18n.leadingColorCode(fallback);
         if (code != 0) {
             ChatFormatting color = ChatFormatting.getByCode(code);
             if (color != null) c = c.withStyle(color);
+        }
+        if (I18n.hasPrefix(key)) {
+            MutableComponent out = Component.empty();
+            appendLegacy(out, I18n.PREFIX, Style.EMPTY);
+            return out.append(c);
         }
         return c;
     }
@@ -92,6 +98,9 @@ final class FabricText {
         }
         if (a instanceof P2PText.Link link) {
             return Component.literal(link.url()).withStyle(s -> withClick(s.withUnderlined(true), Compat.openUrl(link.url())));
+        }
+        if (a instanceof P2PText.Run run) {
+            return translatable(run.labelKey()).withStyle(s -> withClick(s, Compat.runCommand(run.command())));
         }
         return Component.literal(String.valueOf(a));
     }

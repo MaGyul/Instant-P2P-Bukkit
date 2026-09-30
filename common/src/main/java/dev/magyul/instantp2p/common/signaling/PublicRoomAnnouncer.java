@@ -215,7 +215,7 @@ public final class PublicRoomAnnouncer {
      * 그래서 메시지 형식은 건드리지 않는다(원본 1.4). 토큰이 없으면 붙이지 않는다(인증을 안 쓰는 서버면 통과, 쓰면 401).
      */
     private WebSocketClient newClient(int gen, String lobbyId, String t) {
-        String url = P2PConfig.SIGNALING_URL + "/" + lobbyId + "/r" + roomCode
+        String url = P2PConfig.signalingUrl() + "/" + lobbyId + "/r" + roomCode
                 + (t != null ? "?token=" + URLEncoder.encode(t, StandardCharsets.UTF_8) : "");
         return new WebSocketClient(url) {
             @Override public void onConnected() {

@@ -145,7 +145,7 @@ final class VelocityPlatform implements P2PPlatform {
 
     @Override
     public void notifyAdmins(String translationKey, Object... args) {
-        LOGGER.info(I18n.stripLegacy(I18n.format(translationKey, args))); // 콘솔에는 서식 코드 없이
+        LOGGER.info(I18n.stripLegacy(I18n.formatLog(translationKey, args))); // 콘솔에는 서식 코드 없이
         for (Player p : server.getAllPlayers()) {
             if (isAdmin(p)) p.sendMessage(VelocityText.translatable(translationKey, args));
         }

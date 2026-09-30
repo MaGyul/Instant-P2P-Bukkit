@@ -21,3 +21,12 @@ dependencies {
     // 서버에 없으므로 플랫폼 jar에 넣고, 원본 클라이언트 모드(kwik을 품고 있다)와 겹치지 않게 relocate한다 (shadow 설정은 각 플랫폼 모듈).
     implementation("tech.kwik:kwik:$kwikVersion")
 }
+
+// 서버판 버전 — 가맹점 서버 상태 보고(v=)에 싣는다 (signaling/Presence)
+tasks.processResources {
+    val props = mapOf("version" to project.version.toString())
+    inputs.properties(props)
+    filesMatching("instant-p2p-server.properties") {
+        expand(props)
+    }
+}

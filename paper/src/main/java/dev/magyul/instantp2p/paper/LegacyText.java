@@ -35,7 +35,7 @@ final class LegacyText implements ServerText {
 
     private static boolean hasClickable(Object[] args) {
         for (Object a : args) {
-            if (a instanceof P2PText.Copy || a instanceof P2PText.Link) return true;
+            if (a instanceof P2PText.Copy || a instanceof P2PText.Link || a instanceof P2PText.Run) return true;
         }
         return false;
     }
@@ -49,7 +49,8 @@ final class LegacyText implements ServerText {
         Object[] formatArgs = new Object[args.length];
         for (int i = 0; i < args.length; i++) {
             marks[i] = "\u0000" + i + "\u0000";
-            formatArgs[i] = args[i] instanceof P2PText.Copy || args[i] instanceof P2PText.Link ? marks[i] : args[i];
+            formatArgs[i] = args[i] instanceof P2PText.Copy || args[i] instanceof P2PText.Link || args[i] instanceof P2PText.Run
+                    ? marks[i] : args[i];
         }
         String formatted = I18n.format(key, formatArgs);
         java.util.List<BaseComponent> out = new java.util.ArrayList<>();
@@ -78,6 +79,12 @@ final class LegacyText implements ServerText {
             TextComponent c = new TextComponent(TextComponent.fromLegacyText(I18n.fallback(P2PText.COPY_KEY)));
             c.setClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, copy.value()));
             c.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new Text(I18n.fallback(P2PText.COPY_HOVER_KEY))));
+            return c;
+        }
+        if (a instanceof P2PText.Run run) {
+            TextComponent c = new TextComponent(TextComponent.fromLegacyText(I18n.fallback(run.labelKey())));
+            c.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, run.command()));
+            c.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new Text(run.command())));
             return c;
         }
         P2PText.Link link = (P2PText.Link) a;

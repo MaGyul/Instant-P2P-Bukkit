@@ -68,13 +68,13 @@ public final class ModVersion {
     }
 
     /** announce를 멈출 때 — 다음 호스트 시작에서 다시 묻는다. */
-    static void reset() {
+    public static void reset() {
         fetched = null;
     }
 
     private static String fetch() {
         try {
-            HttpRequest req = HttpRequest.newBuilder(URI.create(P2PConfig.SIGNALING_HTTP_URL + "/api/v1/version"))
+            HttpRequest req = HttpRequest.newBuilder(URI.create(P2PConfig.signalingHttpUrl() + "/api/v1/version"))
                     .timeout(HTTP_TIMEOUT)
                     .GET()
                     .build();

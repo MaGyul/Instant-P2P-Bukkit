@@ -27,11 +27,16 @@ public final class P2PText {
         @Override public String toString() { return url; }
     }
 
-    /** 콘솔용 — {@link Copy}/{@link Link}를 평문으로 바꾼다. */
+    /** 클릭하면 명령을 실행하는 버튼 — 문구는 {@code labelKey} 번역. 콘솔에는 명령 자체가 보인다. */
+    public record Run(String command, String labelKey) {
+        @Override public String toString() { return command; }
+    }
+
+    /** 콘솔용 — {@link Copy}/{@link Link}/{@link Run}을 평문으로 바꾼다. */
     public static Object[] plain(Object[] args) {
         Object[] out = args.clone();
         for (int i = 0; i < out.length; i++) {
-            if (out[i] instanceof Copy || out[i] instanceof Link) out[i] = out[i].toString();
+            if (out[i] instanceof Copy || out[i] instanceof Link || out[i] instanceof Run) out[i] = out[i].toString();
         }
         return out;
     }

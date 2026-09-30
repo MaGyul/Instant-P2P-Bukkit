@@ -1,6 +1,7 @@
 package dev.magyul.instantp2p.paper;
 
 import dev.magyul.instantp2p.common.core.P2PSettings;
+import dev.magyul.instantp2p.common.signaling.SignalingServer;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -39,7 +40,16 @@ final class PaperSettings {
                 config.getBoolean("allowBroadcast", false),
                 config.getInt("udpPort", 0),
                 config.getBoolean("maxPlayersEnabled", false),
-                config.getInt("maxPlayers", 0));
+                config.getInt("maxPlayers", 0),
+                server(config.getString("signalingServer", SignalingServer.OFFICIAL.id())),
+                config.getString("franchiseTermsAccepted", ""));
+    }
+
+    /** 모르는 값이면 설정 오류 — 오타로 공식 서버에 조용히 붙지 않게 */
+    private static SignalingServer server(String value) throws InvalidConfigurationException {
+        SignalingServer s = SignalingServer.parse(value);
+        if (s == null) throw new InvalidConfigurationException("signalingServer는 official 또는 franchise여야 합니다: " + value);
+        return s;
     }
 
     /**
@@ -50,13 +60,19 @@ final class PaperSettings {
         File file = new File(plugin.getDataFolder(), "config.yml");
         YamlConfiguration config = new YamlConfiguration();
         config.load(file);
-        boolean addComment = !config.contains("maxPlayersEnabled") && values.containsKey("maxPlayersEnabled");
+        boolean addMaxComment = !config.contains("maxPlayersEnabled") && values.containsKey("maxPlayersEnabled");
+        boolean addServerComment = !config.contains("signalingServer") && values.containsKey("signalingServer");
         values.forEach(config::set);
-        if (addComment) {
-            // 1.1.0 이전 config.yml에는 이 키가 없다 — 끝에 붙으므로 설명을 달아 둔다
+        // 예전 config.yml에는 이 키들이 없다 — 끝에 붙으므로 설명을 달아 둔다
+        if (addMaxComment) {
             config.setComments("maxPlayersEnabled", List.of(
                     "P2P 최대 인원 (/p2p max-players on|off|set <인원>) — 켜면 P2P 접속은 서버 정원 대신 maxPlayers 기준으로 막습니다",
                     "maxPlayers는 서버 정원(max-players)보다 클 수 없습니다"));
+        }
+        if (addServerComment) {
+            config.setComments("signalingServer", List.of(
+                    "방을 올릴 서버: official(본점, 공식 서버) 또는 franchise(가맹점, sion 사설 서버) — /p2p server 로도 바꿀 수 있습니다",
+                    "franchise는 가맹점 약관 동의(franchiseTermsAccepted)가 있어야 쓰입니다 — /p2p server franchise"));
         }
         config.save(file);
     }

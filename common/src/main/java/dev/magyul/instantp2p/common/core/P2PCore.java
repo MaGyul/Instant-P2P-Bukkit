@@ -9,6 +9,10 @@ import dev.magyul.instantp2p.common.tunnel.TunnelRegistry;
 import dev.magyul.instantp2p.common.core.ExpelManager;
 import dev.magyul.instantp2p.common.signaling.Roles;
 import dev.magyul.instantp2p.common.core.P2PBridge;
+import dev.magyul.instantp2p.common.signaling.ModVersion;
+import dev.magyul.instantp2p.common.signaling.P2PConfig;
+import dev.magyul.instantp2p.common.signaling.Presence;
+import dev.magyul.instantp2p.common.signaling.SignalingServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,6 +51,8 @@ public final class P2PCore {
     private final P2PBridge bridge;
     private final HostAccount account;
     private final HostController host;
+    /** 가맹점 서버 상태 보고 — 가맹점 서버일 때만 보낸다 */
+    private final Presence presence;
     private volatile boolean ipRestoreUnavailable;
     /** 터널로 로그인 중인 UUID → 기록 시각. 정원 검사 이벤트에 주소가 없는 플랫폼(Paper)이 쓴다. */
     private final Map<UUID, Long> tunnelLogins = new ConcurrentHashMap<>();
@@ -57,6 +63,39 @@ public final class P2PCore {
         this.bridge = new P2PBridge(this);
         this.account = new HostAccount(platform.dataFolder(), platform.settings().serverUuid().toString());
         this.host = new HostController(this);
+        P2PSettings s = platform.settings();
+        P2PConfig.useServer(s.effectiveServer());
+        warnIfTermsMissing(s);
+        this.presence = new Presence(this);
+        presence.start();
+    }
+
+    public Presence presence() { return presence; }
+
+    /**
+     * 서버 스레드. 설정을 적용한다 — 플랫폼 값과 방을 올릴 서버. 설정은 이 메서드로만 바꾼다.
+     *
+     * @return 방을 올릴 서버가 바뀌었는지 (열려 있으면 다시 열어야 한다 — {@link HostController#reopenIfOpen})
+     */
+    public boolean applySettings(P2PSettings s) {
+        SignalingServer before = P2PConfig.server();
+        platform.applySettings(s);
+        SignalingServer now = s.effectiveServer();
+        P2PConfig.useServer(now);
+        warnIfTermsMissing(s);
+        if (before == now) return false;
+        // 게시 토큰·TURN 계정·버전 조회 결과는 서버마다 따로다
+        account.forgetServerState();
+        ModVersion.reset();
+        LOG.info("[host] 방을 올릴 서버를 바꿨습니다: {} ({})", now.id(), now.host());
+        return true;
+    }
+
+    private static void warnIfTermsMissing(P2PSettings s) {
+        if (s.server() == SignalingServer.FRANCHISE && !s.franchiseTermsAccepted()) {
+            LOG.warn("[host] signalingServer가 franchise지만 가맹점 약관(버전 {})에 동의하지 않아 공식 서버를 씁니다 — /p2p server franchise",
+                    SignalingServer.FRANCHISE_TERMS_VERSION);
+        }
     }
 
     public P2PPlatform platform() { return platform; }

@@ -48,6 +48,11 @@ public final class HostController {
     });
 
     private volatile RoomState state = RoomState.CLOSED;
+    /**
+     * {@code /p2p open publicRoom} — 이번에 연 방은 설정의 publicRoom과 관계없이 공개 방 목록에도 올린다.
+     * 사용자가 닫을 때(close·logout) 해제하고, 서버 변경·새 코드로 다시 열 때는 유지한다.
+     */
+    private volatile boolean publicOverride;
     /** 초대 코드 + 랑데부 방장 key. 한 번도 연 적이 없으면 null */
     private volatile Room room;
 
@@ -63,10 +68,23 @@ public final class HostController {
         return state;
     }
 
-    /** 저장된 초대 코드, 한 번도 연 적이 없으면 null */
+    /** 저장된 초대 코드(시그널링에 쓰는 원래 값), 한 번도 연 적이 없으면 null */
     public String inviteCode() {
         Room r = room;
         return r != null ? r.code() : null;
+    }
+
+    /**
+     * 사람에게 보여 줄 초대 코드 — 가맹점 서버면 앞에 {@code F-}를 붙인다(가맹점 클라이언트가 이걸 보고 가맹점 서버로 간다).
+     * 한 번도 연 적이 없으면 null.
+     */
+    public String displayCode() {
+        String code = inviteCode();
+        return code != null ? display(code) : null;
+    }
+
+    private static String display(String code) {
+        return dev.magyul.instantp2p.common.signaling.P2PConfig.server().codePrefix() + code;
     }
 
     // ── 서버 수명주기 ─────────────────────────────────────────────────────────
@@ -86,6 +104,7 @@ public final class HostController {
 
     /** 서버 종료 — 부른 스레드에서 끝까지 닫는다. */
     public void shutdown() {
+        core.presence().stop();
         executor.shutdownNow();
         try {
             executor.awaitTermination(3, TimeUnit.SECONDS);
@@ -102,17 +121,39 @@ public final class HostController {
     // ── 명령어 ───────────────────────────────────────────────────────────────
 
     public void open(P2PSender sender) {
+        open(sender, false);
+    }
+
+    /** @param forcePublic {@code /p2p open publicRoom} — 이번 방은 설정과 관계없이 공개 방으로 (열려 있으면 지금 올린다) */
+    public void open(P2PSender sender, boolean forcePublic) {
         if (core.account().state() != HostAccount.State.LOGGED_IN) {
             sender.send(K + "open.need_login");
             return;
         }
         if (state != RoomState.CLOSED) {
-            sender.send(K + (state == RoomState.OPEN ? "open.already" : "open.opening"), new P2PText.Copy(room().code()));
+            if (forcePublic) {
+                if (publicRoomActive()) {
+                    sender.send(K + "open.public_already");
+                } else {
+                    publicOverride = true;
+                    sender.send(K + "open.public_now");
+                    publishPublicRoom(); // 여는 중이면 열린 뒤 doOpen이 올린다
+                }
+                return;
+            }
+            sender.send(K + (state == RoomState.OPEN ? "open.already" : "open.opening"), new P2PText.Copy(display(room().code())));
             return;
         }
+        publicOverride = forcePublic;
         state = RoomState.OPENING;
         sender.send(K + "open.opening");
+        if (forcePublic && !core.settings().publicRoom()) sender.send(K + "open.public");
         executor.execute(() -> doOpen(sender));
+    }
+
+    /** 공개 방 목록에 올리는지 — 설정의 publicRoom, 또는 이번 방만 {@code /p2p open publicRoom} */
+    public boolean publicRoomActive() {
+        return core.settings().publicRoom() || publicOverride;
     }
 
     public void close(P2PSender sender) {
@@ -120,6 +161,7 @@ public final class HostController {
             sender.send(K + "close.none");
             return;
         }
+        publicOverride = false;
         executor.execute(() -> {
             doClose();
             reply(sender, K + "close.done");
@@ -133,8 +175,8 @@ public final class HostController {
             if (wasOpen) doClose();
             Room r = newRoom();
             String code = r.code();
-            LOG.info("초대 코드를 새로 만들었습니다: {}", code);
-            reply(sender, K + "newcode.done", new P2PText.Copy(code));
+            LOG.info("초대 코드를 새로 만들었습니다: {}", display(code));
+            reply(sender, K + "newcode.done", new P2PText.Copy(display(code)));
             if (wasOpen) {
                 state = RoomState.OPENING;
                 doOpen(sender);
@@ -142,8 +184,20 @@ public final class HostController {
         });
     }
 
+    /** 방을 올릴 서버가 바뀌었다 — 열려 있으면 새 서버로 다시 연다(같은 초대 코드, 표시만 서버에 맞게). */
+    public void reopenIfOpen(P2PSender sender) {
+        executor.execute(() -> {
+            if (state == RoomState.CLOSED) return;
+            doClose();
+            state = RoomState.OPENING;
+            reply(sender, K + "open.opening");
+            doOpen(sender);
+        });
+    }
+
     /** 로그아웃 — 열려 있으면 닫는다(방장 재접속·공개 방에 토큰이 필요하므로). */
     public void logout(P2PSender sender) {
+        publicOverride = false;
         executor.execute(() -> {
             if (state != RoomState.CLOSED) {
                 doClose();
@@ -177,7 +231,7 @@ public final class HostController {
             sender.send(K + "reload.uuid_kept");
             fresh = fresh.withServerUuid(old.serverUuid());
         }
-        core.platform().applySettings(fresh);
+        boolean serverChanged = core.applySettings(fresh);
         LOG.info("설정을 다시 불러왔습니다");
         sender.send(K + "reload.done");
         if (fresh.limitsMaxPlayers() != old.limitsMaxPlayers() || fresh.maxPlayers() != old.maxPlayers()) {
@@ -185,6 +239,11 @@ public final class HostController {
         }
 
         if (state == RoomState.CLOSED) return;
+        if (serverChanged) {
+            // 다른 서버로 옮긴다 — 다시 열면 공개 방·UDP 포트도 새 값으로 올라간다
+            reopenIfOpen(sender);
+            return;
+        }
         if (fresh.udpPort() != old.udpPort()) sender.send(K + "reload.udp_port");
         if (fresh.allowBroadcast() != old.allowBroadcast()) core.broadcastRoomState();
         if (fresh.publicRoomDiffers(old)) {
@@ -200,7 +259,7 @@ public final class HostController {
     public void publishPublicRoom() {
         P2PSettings settings = core.settings();
         String code = inviteCode();
-        if (state != RoomState.OPEN || !settings.publicRoom() || code == null) return;
+        if (state != RoomState.OPEN || !publicRoomActive() || code == null) return;
         if (core.platform().minecraftVersion() == null) return; // 버전을 알아야 목록에서 호환으로 보인다
         String title = settings.title().isEmpty() ? core.platform().motd() : settings.title();
         core.bridge().publishPublicRoom(code, title, settings.name(), settings.serverUuid().toString(),
@@ -217,8 +276,8 @@ public final class HostController {
             core.account().publishToken();
             core.bridge().startHost(code, r.hostKey(), core.platform().targetHost() + ":" + core.platform().listenPort());
             state = RoomState.OPEN;
-            LOG.info("초대 코드: {}", code);
-            reply(sender, K + "open.done", new P2PText.Copy(code));
+            LOG.info("초대 코드: {}", display(code));
+            reply(sender, K + "open.done", new P2PText.Copy(display(code)));
             core.platform().runSync(this::publishPublicRoom);
         } catch (AuthException e) {
             state = RoomState.CLOSED;

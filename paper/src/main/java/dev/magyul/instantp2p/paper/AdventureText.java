@@ -60,11 +60,15 @@ final class AdventureText implements ServerText {
             comps[i] = arg(args[i]);
         }
         if (key.startsWith(SERVER_KEYS)) return filled(fallback, comps);
+        fallback = I18n.plainFallback(key); // 머리말은 번역 컴포넌트 바깥에 (클라이언트가 번역해도 남게)
         TranslatableComponent c = Component.translatable(key, I18n.stripLegacy(fallback), comps);
         char code = I18n.leadingColorCode(fallback);
         if (code != 0) {
             LegacyFormat format = LegacyComponentSerializer.parseChar(code);
             if (format != null && format.color() != null) c = c.color(format.color());
+        }
+        if (I18n.hasPrefix(key)) {
+            return Component.text().append(LegacyComponentSerializer.legacySection().deserialize(I18n.PREFIX)).append(c).build();
         }
         return c;
     }
@@ -99,7 +103,7 @@ final class AdventureText implements ServerText {
         return "";
     }
 
-    /** {@link P2PText.Copy}는 값을 숨긴 복사 버튼, {@link P2PText.Link}는 클릭하면 열리는 주소 */
+    /** {@link P2PText.Copy}는 값을 숨긴 복사 버튼, {@link P2PText.Link}는 클릭하면 열리는 주소, {@link P2PText.Run}은 클릭하면 실행되는 명령 */
     private static ComponentLike arg(Object a) {
         if (a instanceof ComponentLike c) return c;
         if (a instanceof P2PText.Copy copy) {
@@ -111,6 +115,11 @@ final class AdventureText implements ServerText {
             return Component.text(link.url())
                     .decorate(TextDecoration.UNDERLINED)
                     .clickEvent(ClickEvent.openUrl(link.url()));
+        }
+        if (a instanceof P2PText.Run run) {
+            return translatable(run.labelKey())
+                    .clickEvent(ClickEvent.runCommand(run.command()))
+                    .hoverEvent(HoverEvent.showText(Component.text(run.command())));
         }
         return Component.text(String.valueOf(a));
     }

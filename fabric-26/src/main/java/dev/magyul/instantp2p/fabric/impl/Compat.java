@@ -19,6 +19,10 @@ final class Compat {
         return new ClickEvent.CopyToClipboard(value);
     }
 
+    static ClickEvent runCommand(String command) {
+        return new ClickEvent.RunCommand(command);
+    }
+
     static ClickEvent openUrl(String url) {
         try {
             return new ClickEvent.OpenUrl(URI.create(url));

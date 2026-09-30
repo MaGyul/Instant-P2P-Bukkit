@@ -29,9 +29,10 @@ jar 하나(`instant-p2p-server-<버전>.jar`)를 서버에 넣으면 됩니다. 
 |---|---|
 | `/p2p` (`status`) | 계정, 방 상태·초대 코드, 자동 열기 여부 |
 | `/p2p login` / `logout` | 계정 로그인 / 로그아웃(저장된 로그인 정보 삭제, 열려 있으면 닫음) |
-| `/p2p open` / `close` | 방 열기 / 닫기 |
+| `/p2p open [publicRoom]` / `close` | 방 열기 / 닫기 — `publicRoom`을 붙이면 이번 방은 설정과 관계없이 공개 방 목록에도 올림(닫으면 해제) |
 | `/p2p code` / `newcode` | 초대 코드 보기 / 새로 만들기(열려 있으면 새 코드로 다시 엶) |
 | `/p2p max-players [on\|off\|set <인원>]` | P2P 최대 인원 — 켜면 P2P 접속은 서버 정원 대신 이 인원으로 막음(서버 정원 이하, 설정 파일에 저장) |
+| `/p2p server [official\|franchise]` | 방을 올릴 서버 — 본점(공식) 또는 가맹점(사설). 가맹점은 약관 동의 후, 설정 파일에 저장 |
 | `/p2p reload` | 설정 파일 다시 읽기 — 열려 있는 방에 바로 반영(`udpPort`는 다시 열어야, `serverUuid`는 재시작해야 적용) |
 
 - 권한: `instantp2p.admin`(기본 op). Fabric은 op 또는 콘솔.
@@ -42,13 +43,26 @@ jar 하나(`instant-p2p-server-<버전>.jar`)를 서버에 넣으면 됩니다. 
 
 ## 설정
 
-설정 키: `enabled`(서버 시작 시 자동으로 열기, 기본 `false`), `serverUuid`(자동 생성), `targetModVersion`, `title`, `name`, `publicRoom`, `channels`, `channelAnd`, `allowBroadcast`, `udpPort`, `maxPlayersEnabled`, `maxPlayers`.
+설정 키: `enabled`(서버 시작 시 자동으로 열기, 기본 `false`), `serverUuid`(자동 생성), `targetModVersion`, `title`, `name`, `publicRoom`, `channels`, `channelAnd`, `allowBroadcast`, `udpPort`, `maxPlayersEnabled`, `maxPlayers`, `signalingServer`, `franchiseTermsAccepted`.
 Velocity만 `minecraftVersion`(비우면 첫 백엔드에 ping해서 정함)이 더 있습니다.
 
 - `targetModVersion`: 기본 `auto`. 공개 방을 올릴 때 시그널링 서버가 알려주는 최신 배포 버전을 씁니다. 특정 버전 클라이언트에게만 보이게 하려면 `"1.4.3"`처럼 적습니다. 서버판은 모드 1.4.3 이상만 받으므로, 버전 API가 1.4.3 미만을 주면(서버 쪽 갱신 지연) 1.4.3을 씁니다.
 - `maxPlayersEnabled`, `maxPlayers`: P2P 최대 인원(`/p2p max-players`로 바꾸면 여기에 저장). 켜져 있으면 P2P로 들어오는 접속은 전체 접속 인원이
   `maxPlayers`에 닿았을 때 "서버가 꽉 찼습니다"로 막히고, 모드에 보이는 방 정원도 이 값이 됩니다. 서버 주소로 직접 접속하는 사람은 서버 정원 그대로,
   개발자·서포터는 정원 초과 입장처럼 예외입니다. 서버 정원보다 크게 정할 수 없고, 나중에 서버 정원을 줄이면 서버 정원이 적용됩니다.
+- `signalingServer`: 방을 올릴 서버. `official`(본점, 원본 공식 서버) 또는 `franchise`(가맹점 — 원본 개발자가 허락한 비공식 수정판
+  "Instant P2P 가맹점"의 사설 서버 `sion-p2p-server.kro.kr`). 한 번에 한쪽만 씁니다. 가맹점이면 초대 코드가 `F-`로 시작하고,
+  가맹점 모드 클라이언트가 그 코드로 가맹점 서버에 붙습니다. 가맹점은 약관에 동의해야 쓰입니다 — `/p2p server franchise`로 약관을 보고
+  [동의]를 누르면 `franchiseTermsAccepted`에 약관 버전이 적힙니다(동의 전에는 공식 서버). 가맹점 서버를 쓰는 동안에는 가맹점 모드와 같게 기기 식별값(해시)을 방 열기에 붙이고 1분마다 접속 상태(방 코드·접속자)를 보고합니다(가맹점 운영자: 범죄 발생 시 후속 대응, 위조 방지). 공식 서버에는 보내지 않습니다.
+  역할(개발자·서포터 등)은 서버 선택과 관계없이 공식 서버에서 받습니다(서명 확인).
+
+> [!WARNING]
+> **가맹점 서버 이용 시 책임 안내**
+> 가맹점(`franchise`) 서버는 원본 개발자의 허락을 받은 비공식 수정판의 운영자가 따로 운영하는 사설 서버입니다.
+> 이 프로젝트(서버 통합판)와 원본 instant-p2p의 개발자는 가맹점 서버를 운영·관리하지 않으며, 그 운영 방식이나 정보 처리에 관여하지 않습니다.
+> 가맹점 서버를 사용하기로 한 선택과 그로 인해 생기는 모든 결과 — 접속 장애, 정보 수집·보관, 차단, 서버나 계정에 생기는 피해 등 — 에 대한
+> 책임은 이를 선택한 서버 운영자에게 있으며, 이 프로젝트와 원본 개발자는 어떠한 책임도 지지 않습니다.
+> 가맹점 서버 관련 문의는 가맹점 운영자에게 해 주세요. 약관은 `/p2p server franchise`에서 동의 전에 확인할 수 있습니다.
 - `udpPort`: QUIC이 쓸 UDP 포트. 기본 `0`은 실행할 때마다 임의 포트입니다. 방화벽이 있는 서버라면 포트를 정해 UDP로 열어 두면 중계 없이 직결되는 경우가 늘어납니다.
   다른 UDP 용도(`enable-query`의 25565, Simple Voice Chat 24454, Geyser 19132)와 겹치지 않게 하세요. 이미 쓰이는 포트면 경고를 남기고 임의 포트로 엽니다.
 

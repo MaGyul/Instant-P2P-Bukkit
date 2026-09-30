@@ -114,8 +114,10 @@ v1_21=intermediary·v26=Mojang 이름을 검사한다.
   탐색 실패 시 어떤 타입을 못 찾았는지 로그를 남기고 IP 복원만 끈다(접속은 되게). `instantp2p.notify.host` 권한자에게 "개발자에게 문의" 알림.
 - 지원 범위는 MC 1.21 이상(원본 모드 최소 버전). MC 버전 문자열은 런타임에 얻는다.
 
+- `/p2p open publicRoom`: 이번 방만 설정 `publicRoom`과 관계없이 공개 방으로(`HostController.publicOverride`, 열려 있으면 바로 올림).
+  사용자가 닫을 때(close·logout) 해제, 서버 변경·newcode로 다시 열 때는 유지. 공개 여부 판단은 `publicRoomActive()`로만.
 - `enabled`: **서버 시작 시 자동으로 열기**(기본 false). 꺼져 있어도 플러그인은 켜지고 `/p2p open`으로 연다. 로그인 전이면 안내만.
-- `/p2p status|login|logout|open|close|code|newcode|reload|max-players` — 권한 `instantp2p.admin`(Fabric은 op/콘솔). 플레이어에게는 초대·로그인 코드를
+- `/p2p status|login|logout|open|close|code|newcode|reload|max-players|server` — 권한 `instantp2p.admin`(Fabric은 op/콘솔). 플레이어에게는 초대·로그인 코드를
   숨기고 클릭 복사 버튼으로 보낸다(방송 대비, 로그인 코드도 먼저 입력한 사람 계정이 로그인되므로 가린다). 콘솔은 평문.
 - `reload`: `P2PPlatform.loadSettings/applySettings`, 반영은 `HostController.reload` — 공개 방 값이 바뀌면 내렸다 다시 올리고,
   allowBroadcast면 room_state 재전송. `udpPort`는 안내만(자동 재오픈은 접속자를 끊음),
@@ -125,7 +127,15 @@ v1_21=intermediary·v26=Mojang 이름을 검사한다.
   앱 ID는 마인월드 런처(`MicrosoftAuth.CLIENT_ID`, `-Dinstantp2p.auth.clientId`로 변경) — Minecraft API 승인 + 공용 클라이언트 흐름 허용.
 
 설정 키: `enabled`, `serverUuid`, `targetModVersion`, `title`, `name`, `publicRoom`, `channels`, `channelAnd`, `allowBroadcast`, `udpPort`,
-`maxPlayersEnabled`, `maxPlayers` (Velocity만 `minecraftVersion` 추가).
+`maxPlayersEnabled`, `maxPlayers`, `signalingServer`, `franchiseTermsAccepted` (Velocity만 `minecraftVersion` 추가).
+- `signalingServer`(1.2.0): `official`(본점) | `franchise`(가맹점 — 원본 개발자가 허락한 비공식 수정판 "Instant P2P 가맹점"(sion)의 사설 서버
+  `sion-p2p-server.kro.kr`, 프로토콜은 공식 1.4.3과 같다). 한쪽만 연다(`signaling/SignalingServer`, `P2PConfig.server()` — URL은 상수가 아니라 메서드).
+  가맹점은 약관 동의(`franchiseTermsAccepted` = `SignalingServer.FRANCHISE_TERMS_VERSION`)가 있어야 쓰고, 없으면 공식(`P2PSettings.effectiveServer`).
+  `/p2p server franchise`가 약관 전문 + [동의]/[거부] 버튼(`P2PText.Run`, 클릭하면 명령 실행)을 보여 준다. 초대 코드 표시에 `F-`(`HostController.displayCode`,
+  시그널링에는 원래 코드). 설정 적용은 `P2PCore.applySettings`로만 — 서버가 바뀌면 게시 토큰·TURN 계정·버전 조회를 버리고, 열려 있으면 다시 연다.
+  가맹점 서버일 때만 가맹점 수정판과 같게 hwid(`signaling/HardwareId`, 방장 `/rv/…/host` URL에 `&hwid=&hw2=`)와 1분마다 presence
+  (`signaling/Presence`, `v=server-<버전>` — 버전은 `instant-p2p-server.properties`)를 보낸다. 운영자 설명: hwid는 범죄 발생 시 후속 대응, presence는 위조 방지·운영.
+  사용자에게 보이는 메시지에는 서버 도메인을 넣지 않는다. **역할은 항상 공식 서버**에서(`P2PConfig.officialHttpUrl`) — 가맹점 서버는 서명 없는 다른 목록을 준다.
 - `max-players`(1.1.0): 켜져 있으면 **터널 접속만** 전체 접속자 수(`P2PCore` 집합)가 `P2PCore.maxPlayers()`(= min(설정값, 서버 정원))에 닿으면
   바닐라 `multiplayer.disconnect.server_full`로 거부(`P2PCore.isP2PFull`), 개발자·서포터는 예외. room_state·공개 방 정원도 이 값.
   명령은 `P2PPlatform.saveSettings`로 해당 키만 파일에 쓰고(Paper는 YamlConfiguration 재파싱 → 주석 보존, 문법 오류면 예외·무변경) 적용한다.
@@ -137,7 +147,7 @@ v1_21=intermediary·v26=Mojang 이름을 검사한다.
 
 ## 건드리면 안 되는 것 (원본 모드 1.4.3과의 호환)
 
-- 인프라: 시그널링 `wss://kite-private-cloud.kro.kr`(평문 8090은 닫힘), STUN/TURN `:3490`(TURN 계정은 `/api/v1/turn/credentials?token=`로 발급, 고정 계정 없음).
+- 인프라: 시그널링 `wss://kite-private-cloud.kro.kr`(평문 8090은 닫힘, 가맹점은 `sion-p2p-server.kro.kr` — 같은 구조), STUN/TURN `:3490`(TURN 계정은 `/api/v1/turn/credentials?token=`로 발급, 고정 계정 없음).
 - 인증: `/api/v1/auth/challenge` → Mojang `session/minecraft/join`(accessToken, 대시 없는 uuid, serverId=challenge) →
   `/api/v1/auth/verify?username&challenge` → 게시 토큰(`expires_in` 12시간). challenge가 503이면 서버가 인증을 안 쓰는 상태.
 - 랑데부: 방장 `/rv/{code}/host?key={hostKey}&token=…`(토큰 없으면 401). 서버 → 방장 `{"join":{"sid","relay","probe"}}`, `{"leave":{"sid"}}`,
@@ -203,6 +213,10 @@ v1_21=intermediary·v26=Mojang 이름을 검사한다.
   **Fabric `server.execute()`는 서버 스레드에서 부르면 즉시 실행된다** — 다른 스레드를 한 번 거쳐 `execute`(`FabricPlatform.runSync`).
 - members probe는 worker 스레드에서 돌므로 플랫폼 온라인 목록 대신 `P2PCore`가 이벤트로 관리하는 UUID 집합을 쓴다.
 - 번역은 `Component.translatable(key, fallback)` — fallback의 `§` 코드는 떼고 맨 앞 색만 스타일로(콘솔 `LegacyFormattingDetected` 방지).
+- 서버판 메시지(`instant-p2p-server.*`)는 `I18n.fallback`이 머리말 `§b[P2P]§r `을 붙인다(모든 플랫폼 공통). 다른 메시지에 끼워 쓰는 조각·약관 본문 줄은
+  `I18n.NO_PREFIX`에 넣어 뺀다(새 조각 키를 만들면 여기 추가). 로거로 찍는 콘솔 로그는 `I18n.formatLog`(로거 태그와 겹치지 않게). 모드 키는 클라이언트 번역이라 문구에 못 넣으므로,
+  관리자 알림 모드 키(`I18n.PREFIXED_MOD_KEYS` — 시그널링 끊김/복구, 접속 실패, IP 복원 불가)만 플랫폼이 번역 컴포넌트 **바깥 앞에** 머리말 조각을 붙인다
+  (번역 fallback은 `I18n.plainFallback`). 새 관리자 알림 키를 만들면 여기 추가.
 
 ## 남은 작업
 

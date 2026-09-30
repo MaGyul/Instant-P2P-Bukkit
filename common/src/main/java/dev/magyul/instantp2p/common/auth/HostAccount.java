@@ -75,6 +75,18 @@ public final class HostAccount {
         return a != null ? a.name() : null;
     }
 
+    /** 로그인한 계정 UUID(대시 포함), 없으면 null */
+    public String uuid() {
+        Stored a = account;
+        if (a == null || a.uuid() == null) return null;
+        String u = a.uuid();
+        if (u.length() == 32) {
+            u = u.substring(0, 8) + "-" + u.substring(8, 12) + "-" + u.substring(12, 16) + "-"
+                    + u.substring(16, 20) + "-" + u.substring(20);
+        }
+        return u;
+    }
+
     /** 로그인 대기 중인 코드, 없으면 null */
     public MicrosoftAuth.DeviceCode pendingCode() {
         return pendingCode;
@@ -151,6 +163,17 @@ public final class HostAccount {
         return had;
     }
 
+    /**
+     * 시그널링 서버를 바꿨다 — 게시 토큰·TURN 계정은 그 서버가 발급한 것이라 버린다(다음에 새 서버에서 다시 받는다).
+     * Microsoft/Minecraft 로그인은 서버와 무관하므로 그대로 둔다.
+     */
+    public synchronized void forgetServerState() {
+        publishToken = null;
+        publishExpiresAtMs = 0;
+        turn = null;
+        turnReuseUntilMs = 0;
+    }
+
     private void clearTokens() {
         session = null;
         publishToken = null;
@@ -181,7 +204,7 @@ public final class HostAccount {
         if (t != null && System.currentTimeMillis() < publishExpiresAtMs - RENEW_BEFORE_MS) return t;
         if (account == null) throw new AuthException("로그인되어 있지 않습니다 — /p2p login");
 
-        HttpResponse<String> ch = get(P2PConfig.SIGNALING_HTTP_URL + "/api/v1/auth/challenge", "challenge 발급");
+        HttpResponse<String> ch = get(P2PConfig.signalingHttpUrl() + "/api/v1/auth/challenge", "challenge 발급");
         if (ch.statusCode() == 503) {
             LOG.debug("[auth] 시그널링 서버가 인증을 쓰지 않는다 — 토큰 없이 진행");
             return null;
@@ -198,7 +221,7 @@ public final class HostAccount {
             throw new AuthException("Mojang 세션 등록 실패 (HTTP " + join.statusCode() + ")");
         }
 
-        HttpResponse<String> v = get(P2PConfig.SIGNALING_HTTP_URL + "/api/v1/auth/verify?username=" + MicrosoftAuth.enc(mc.name())
+        HttpResponse<String> v = get(P2PConfig.signalingHttpUrl() + "/api/v1/auth/verify?username=" + MicrosoftAuth.enc(mc.name())
                 + "&challenge=" + MicrosoftAuth.enc(challenge), "계정 확인");
         if (v.statusCode() == 403) throw new AuthException("이 계정은 시그널링 서버에서 방 열기가 차단되었습니다");
         JsonObject vo = MicrosoftAuth.json(v.body());
@@ -262,7 +285,7 @@ public final class HostAccount {
         if (c != null && System.currentTimeMillis() < turnReuseUntilMs) return c;
         try {
             String token = publishToken();
-            String url = P2PConfig.SIGNALING_HTTP_URL + "/api/v1/turn/credentials"
+            String url = P2PConfig.signalingHttpUrl() + "/api/v1/turn/credentials"
                     + (token != null ? "?token=" + MicrosoftAuth.enc(token) : "");
             HttpResponse<String> r = get(url, "중계 계정 발급");
             if (r.statusCode() != 200) {

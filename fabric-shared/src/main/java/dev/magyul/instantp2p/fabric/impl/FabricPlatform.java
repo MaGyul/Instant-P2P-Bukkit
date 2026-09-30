@@ -97,7 +97,7 @@ final class FabricPlatform implements P2PPlatform {
     /** 콘솔 로그로 — 서식 코드 없이 */
     @Override
     public P2PSender console() {
-        return (key, args) -> LOGGER.info(I18n.stripLegacy(I18n.format(key, args)));
+        return (key, args) -> LOGGER.info(I18n.stripLegacy(I18n.format(key, args))); // Fabric 콘솔은 로거 이름을 안 찍는다 — 머리말을 붙인다
     }
 
     private ServerPlayer player(UUID id) {
@@ -130,7 +130,7 @@ final class FabricPlatform implements P2PPlatform {
 
     @Override
     public void notifyAdmins(String translationKey, Object... args) {
-        LOGGER.info(I18n.stripLegacy(I18n.format(translationKey, args))); // 콘솔에는 서식 코드 없이
+        LOGGER.info(I18n.stripLegacy(I18n.formatLog(translationKey, args))); // 콘솔에는 서식 코드 없이
         MinecraftServer s = server;
         if (s == null) return;
         for (ServerPlayer p : s.getPlayerList().getPlayers()) {

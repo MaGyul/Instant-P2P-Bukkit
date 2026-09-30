@@ -6,6 +6,8 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import dev.magyul.instantp2p.common.signaling.SignalingServer;
+
 import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
@@ -50,6 +52,8 @@ public final class JsonSettings {
         boolean channelAnd = bool(json, "channelAnd", false);
         boolean maxPlayersEnabled = bool(json, "maxPlayersEnabled", false);
         int maxPlayers = integer(json, "maxPlayers", 0);
+        String server = string(json, "signalingServer", SignalingServer.OFFICIAL.id());
+        String franchiseTerms = string(json, "franchiseTermsAccepted", "");
         String serverUuid = string(json, "serverUuid", "");
         if (serverUuid.isEmpty()) {
             serverUuid = UUID.randomUUID().toString();
@@ -64,7 +68,8 @@ public final class JsonSettings {
         }
 
         return new P2PSettings(enabled, UUID.fromString(serverUuid), targetModVersion, title, name, publicRoom,
-                channels, channelAnd, allowBroadcast, udpPort, maxPlayersEnabled, maxPlayers);
+                channels, channelAnd, allowBroadcast, udpPort, maxPlayersEnabled, maxPlayers,
+                parseServer(server), franchiseTerms);
     }
 
     /** 키 몇 개만 바꿔 저장한다({@code /p2p max-players}). 다른 키는 그대로. 파일을 못 읽으면 예외, 파일 무변경. */
@@ -106,6 +111,13 @@ public final class JsonSettings {
             GSON.toJson(json, w);
         }
         return def;
+    }
+
+    /** 모르는 값이면 예외 — 오타로 공식 서버에 조용히 붙는 대신 설정 오류로 알린다(리로드면 이전 설정 유지) */
+    static SignalingServer parseServer(String value) throws IOException {
+        SignalingServer s = SignalingServer.parse(value);
+        if (s == null) throw new IOException("signalingServer는 official 또는 franchise여야 합니다: " + value);
+        return s;
     }
 
     private static boolean bool(JsonObject json, String key, boolean def) {

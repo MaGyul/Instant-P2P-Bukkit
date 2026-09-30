@@ -30,5 +30,13 @@ channelAnd: false
 maxPlayersEnabled: false
 maxPlayers: 0
 
+# 방을 올릴 서버 (/p2p server 로도 바꿀 수 있습니다)
+#   official  — 본점: 원본 instant-p2p 공식 서버
+#   franchise — 가맹점: 원본 개발자가 허락한 비공식 수정판(sion)의 사설 서버. 초대 코드가 F-로 시작합니다
+# franchise는 가맹점 약관에 동의해야 쓰입니다 — /p2p server franchise 로 약관을 보고 동의하세요
+# (동의하면 아래 franchiseTermsAccepted에 약관 버전이 적힙니다. 동의 전에는 공식 서버를 씁니다)
+signalingServer: "official"
+franchiseTermsAccepted: ""
+
 # 서버 고유 UUID (자동으로 채워집니다 — 로그인 정보 암호화에도 쓰이므로 바꾸지 마세요)
 serverUuid: ""
