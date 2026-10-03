@@ -42,6 +42,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -94,6 +95,17 @@ public final class QuicHost {
     private volatile String fingerprint;
     private volatile List<QuicIce.Candidate> candidates = List.of();
     private volatile long backoffMs = INITIAL_BACKOFF_MS;
+    /**
+     * 시그널링 서버가 방 열기를 거부한 이유 — 다시 붙어도 같으므로 재접속을 멈춘다(가맹점 F3.x와 같게). null이면 정상.
+     * 가맹점 서버가 보내는 오류 코드: 기기·계정 차단, 기기 확인값 없음, 정품 인증 필요, 방 개수 초과.
+     */
+    private volatile String fatalError;
+    private static final Map<String, String> FATAL_HOST_ERRORS = Map.of(
+            "hwid-banned", "이 기기는 중계 서버 운영자에 의해 차단되었습니다",
+            "hwid-required", "기기 확인값을 보내지 못했습니다",
+            "account-banned", "이 계정은 중계 서버 운영자에 의해 차단되었습니다",
+            "auth-required", "이 서버는 정품 계정만 방을 열 수 있습니다",
+            "too-many-rooms", "한 번에 열 수 있는 방 개수를 넘었습니다");
     private volatile boolean signalingDown = false;
     /** 한 번 순단으로는 경고하지 않는다 — 연속 2번 실패해야 알린다 */
     private volatile int consecutiveFailures = 0;
@@ -245,6 +257,14 @@ public final class QuicHost {
                 }
             }
             @Override public void onMessage(String type, String json) {
+                String err = VillasMsg.field(json, "error");
+                if (err != null && FATAL_HOST_ERRORS.containsKey(err)) {
+                    String why = FATAL_HOST_ERRORS.get(err);
+                    fatalError = why;
+                    LOG.warn("[host] 시그널링 서버가 방 열기를 거부했습니다 — {} ({})", why, err);
+                    core.platform().runSync(() -> core.platform().notifyAdmins("instant-p2p-server.host.rejected", why));
+                    return;
+                }
                 handleRendezvous(json);
             }
             @Override protected int readIdleTimeoutMs() {
@@ -271,13 +291,14 @@ public final class QuicHost {
      * 조인 감지가 영구히 멈춰 방은 열려 있는데 아무도 못 들어오는 상태가 된다.
      */
     private void scheduleReconnect() {
-        if (!running.get()) return;
+        if (!running.get() || fatalError != null) return;
         consecutiveFailures++;
         if (!signalingDown && consecutiveFailures >= 2) {
             signalingDown = true;
             core.platform().notifyAdmins("instant-p2p.msg.signaling_unreachable");
         }
-        long delay = backoffMs;
+        // 무작위 지연을 더한다 — 시그널링이 재시작되면 모든 방장이 같은 순간에 다시 붙지 않게(가맹점 F3.3과 같게)
+        long delay = backoffMs + ThreadLocalRandom.current().nextLong(backoffMs / 2 + 1);
         backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
         LOG.info("[host] Signaling reconnect in {}ms", delay);
         try {

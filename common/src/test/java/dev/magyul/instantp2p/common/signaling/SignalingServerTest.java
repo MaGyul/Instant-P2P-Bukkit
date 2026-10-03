@@ -56,10 +56,10 @@ class SignalingServerTest {
     @Test
     void urlsFollowServer() {
         P2PConfig.useServer(SignalingServer.FRANCHISE);
-        assertEquals("wss://sion-p2p-server.kro.kr", P2PConfig.signalingUrl());
-        assertEquals("https://sion-p2p-server.kro.kr", P2PConfig.signalingHttpUrl());
-        assertEquals("stun:sion-p2p-server.kro.kr:3490", P2PConfig.stunUrl());
-        assertEquals("turn:sion-p2p-server.kro.kr:3490", P2PConfig.turnUrl());
+        assertEquals("wss://p2p.sionserver.com", P2PConfig.signalingUrl());
+        assertEquals("https://p2p.sionserver.com", P2PConfig.signalingHttpUrl());
+        assertEquals("stun:turn.sionserver.com:3490", P2PConfig.stunUrl());
+        assertEquals("turn:turn.sionserver.com:3490", P2PConfig.turnUrl());
         // 역할은 서버 선택과 관계없이 공식 서버(서명 확인)
         assertEquals("https://kite-private-cloud.kro.kr", P2PConfig.officialHttpUrl());
 

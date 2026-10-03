@@ -13,22 +13,25 @@ import java.util.Locale;
  */
 public enum SignalingServer {
 
-    OFFICIAL("official", "kite-private-cloud.kro.kr", ""),
-    FRANCHISE("franchise", "sion-p2p-server.kro.kr", "F-");
+    OFFICIAL("official", "kite-private-cloud.kro.kr", "kite-private-cloud.kro.kr", ""),
+    /** F3.2부터 시그널링은 클라우드플레어 경유 도메인, STUN/TURN은 따로(UDP라 클라우드플레어를 못 거친다). 예전 sion-p2p-server.kro.kr은 닫혔다. */
+    FRANCHISE("franchise", "p2p.sionserver.com", "turn.sionserver.com", "F-");
 
     /**
-     * 가맹점 약관 버전 — 가맹점 수정판의 {@code TERMS_VERSION}(F3c 기준, 약관 문구는 i18n {@code instant-p2p-server.terms.body}).
+     * 가맹점 약관 버전 — 가맹점 수정판의 {@code TERMS_VERSION}(F3.3 기준, 약관 문구는 i18n {@code instant-p2p-server.terms.body}).
      * 약관이 바뀌면 다시 동의받는다 — 이전 버전에 동의한 설정은 공식 서버로 돌아가고 경고가 남는다.
      */
-    public static final String FRANCHISE_TERMS_VERSION = "2026-09-30.6";
+    public static final String FRANCHISE_TERMS_VERSION = "2026-10-01.1";
 
     private final String id;
     private final String host;
+    private final String turnHost;
     private final String codePrefix;
 
-    SignalingServer(String id, String host, String codePrefix) {
+    SignalingServer(String id, String host, String turnHost, String codePrefix) {
         this.id = id;
         this.host = host;
+        this.turnHost = turnHost;
         this.codePrefix = codePrefix;
     }
 
@@ -42,9 +45,9 @@ public enum SignalingServer {
 
     public String signalingUrl() { return "wss://" + host; }
 
-    public String stunUrl() { return "stun:" + host + ":3490"; }
+    public String stunUrl() { return "stun:" + turnHost + ":3490"; }
 
-    public String turnUrl() { return "turn:" + host + ":3490"; }
+    public String turnUrl() { return "turn:" + turnHost + ":3490"; }
 
     /** 설정 값 → 서버, 모르는 값이면 null */
     public static SignalingServer parse(String value) {

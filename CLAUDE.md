@@ -129,13 +129,16 @@ v1_21=intermediary·v26=Mojang 이름을 검사한다.
 설정 키: `enabled`, `serverUuid`, `targetModVersion`, `title`, `name`, `publicRoom`, `channels`, `channelAnd`, `allowBroadcast`, `udpPort`,
 `maxPlayersEnabled`, `maxPlayers`, `signalingServer`, `franchiseTermsAccepted` (Velocity만 `minecraftVersion` 추가).
 - `signalingServer`(1.2.0): `official`(본점) | `franchise`(가맹점 — 원본 개발자가 허락한 비공식 수정판 "Instant P2P 가맹점"(sion)의 사설 서버
-  `sion-p2p-server.kro.kr`, 프로토콜은 공식 1.4.3과 같다). 한쪽만 연다(`signaling/SignalingServer`, `P2PConfig.server()` — URL은 상수가 아니라 메서드).
+  시그널링 `p2p.sionserver.com`(클라우드플레어), STUN/TURN `turn.sionserver.com:3490` — F3.2에 옛 `sion-p2p-server.kro.kr`에서 옮겼다, 프로토콜은 공식 1.4.3과 같다). 한쪽만 연다(`signaling/SignalingServer`, `P2PConfig.server()` — URL은 상수가 아니라 메서드).
   가맹점은 약관 동의(`franchiseTermsAccepted` = `SignalingServer.FRANCHISE_TERMS_VERSION`)가 있어야 쓰고, 없으면 공식(`P2PSettings.effectiveServer`).
   `/p2p server franchise`가 약관 전문 + [동의]/[거부] 버튼(`P2PText.Run`, 클릭하면 명령 실행)을 보여 준다. 초대 코드 표시에 `F-`(`HostController.displayCode`,
   시그널링에는 원래 코드). 설정 적용은 `P2PCore.applySettings`로만 — 서버가 바뀌면 게시 토큰·TURN 계정·버전 조회를 버리고, 열려 있으면 다시 연다.
   가맹점 서버일 때만 가맹점 수정판과 같게 hwid(`signaling/HardwareId`, 방장 `/rv/…/host` URL에 `&hwid=&hw2=`)와 1분마다 presence
   (`signaling/Presence`, `v=server-<버전>` — 버전은 `instant-p2p-server.properties`)를 보낸다. 운영자 설명: hwid는 범죄 발생 시 후속 대응, presence는 위조 방지·운영.
   사용자에게 보이는 메시지에는 서버 도메인을 넣지 않는다. **역할은 항상 공식 서버**에서(`P2PConfig.officialHttpUrl`) — 가맹점 서버는 서명 없는 다른 목록을 준다.
+  가맹점 서버일 때만 더하는 역할(F3.3과 같게): 가맹점 개발자(`Roles.FRANCHISE_DEV`, 개발자급 3)·가맹점 방송인(`/api/v1/stream/streamers`, 서명 없음).
+  방장 연결에 `{"error":"hwid-banned|hwid-required|account-banned|auth-required|too-many-rooms"}`가 오면 재접속을 멈추고 관리자에게 알린다(`QuicHost.FATAL_HOST_ERRORS`).
+  가맹점 약관이 바뀌면 버전·본문(ko/en)을 같이 올리고, 약관 화면이 채팅창을 넘지 않게 서버판 안내 줄 길이로 맞춘다.
 - `max-players`(1.1.0): 켜져 있으면 **터널 접속만** 전체 접속자 수(`P2PCore` 집합)가 `P2PCore.maxPlayers()`(= min(설정값, 서버 정원))에 닿으면
   바닐라 `multiplayer.disconnect.server_full`로 거부(`P2PCore.isP2PFull`), 개발자·서포터는 예외. room_state·공개 방 정원도 이 값.
   명령은 `P2PPlatform.saveSettings`로 해당 키만 파일에 쓰고(Paper는 YamlConfiguration 재파싱 → 주석 보존, 문법 오류면 예외·무변경) 적용한다.
@@ -147,7 +150,7 @@ v1_21=intermediary·v26=Mojang 이름을 검사한다.
 
 ## 건드리면 안 되는 것 (원본 모드 1.4.3과의 호환)
 
-- 인프라: 시그널링 `wss://kite-private-cloud.kro.kr`(평문 8090은 닫힘, 가맹점은 `sion-p2p-server.kro.kr` — 같은 구조), STUN/TURN `:3490`(TURN 계정은 `/api/v1/turn/credentials?token=`로 발급, 고정 계정 없음).
+- 인프라: 시그널링 `wss://kite-private-cloud.kro.kr`(평문 8090은 닫힘, 가맹점은 `p2p.sionserver.com` + TURN `turn.sionserver.com` — 같은 구조), STUN/TURN `:3490`(TURN 계정은 `/api/v1/turn/credentials?token=`로 발급, 고정 계정 없음).
 - 인증: `/api/v1/auth/challenge` → Mojang `session/minecraft/join`(accessToken, 대시 없는 uuid, serverId=challenge) →
   `/api/v1/auth/verify?username&challenge` → 게시 토큰(`expires_in` 12시간). challenge가 503이면 서버가 인증을 안 쓰는 상태.
 - 랑데부: 방장 `/rv/{code}/host?key={hostKey}&token=…`(토큰 없으면 401). 서버 → 방장 `{"join":{"sid","relay","probe"}}`, `{"leave":{"sid"}}`,

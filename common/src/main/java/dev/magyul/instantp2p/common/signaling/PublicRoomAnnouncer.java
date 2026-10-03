@@ -247,6 +247,7 @@ public final class PublicRoomAnnouncer {
         if (!isCurrent(gen)) return;
         long delay = backoffMs;
         backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
+        delay += ThreadLocalRandom.current().nextLong(delay / 2 + 1); // 재시작 직후 한꺼번에 몰리지 않게
         try {
             scheduler.schedule(() -> connect(gen, connectedChannels), delay, TimeUnit.MILLISECONDS);
         } catch (RejectedExecutionException ignored) {}

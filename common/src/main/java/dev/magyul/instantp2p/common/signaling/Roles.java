@@ -58,6 +58,14 @@ public final class Roles {
     private static volatile Set<UUID> supporter = Set.of();
     private static volatile Set<UUID> streamer = Set.of();
 
+    /**
+     * 가맹점 개발자 — 가맹점 수정판(F3.3)에 박힌 값. 가맹점 서버를 쓸 때만 개발자급(등급 3, 정원 초과 입장)으로 친다.
+     * 가맹점 서버의 역할 응답에는 서명이 없어서 목록을 받지 않고 수정판과 같은 값을 쓴다.
+     */
+    private static final Set<UUID> FRANCHISE_DEV = Set.of(UUID.fromString("a0837bfc-478f-4d16-82d0-fbfcfdc98905"));
+    /** 가맹점 방송 연동(F3.3)으로 인증된 방송인 — 가맹점 서버 {@code /api/v1/stream/streamers}. 가맹점 서버를 쓸 때만 방송인으로 친다. */
+    private static volatile Set<UUID> franchiseStreamer = Set.of();
+
     private static final HttpClient CLIENT = HttpClient.newBuilder()
             .connectTimeout(HTTP_TIMEOUT)
             .build();
@@ -81,7 +89,17 @@ public final class Roles {
     }
 
     public static boolean isStreamer(UUID id) {
-        return id != null && streamer.contains(id);
+        if (id == null) return false;
+        return streamer.contains(id) || (onFranchise() && franchiseStreamer.contains(id));
+    }
+
+    /** 가맹점 개발자 — 가맹점 서버를 쓸 때만 (서버판은 개발자와 같은 등급으로 다룬다, {@code DevBadge.roleSuffix}) */
+    public static boolean isFranchiseDev(UUID id) {
+        return id != null && onFranchise() && FRANCHISE_DEV.contains(id);
+    }
+
+    private static boolean onFranchise() {
+        return P2PConfig.server() == SignalingServer.FRANCHISE;
     }
 
     /**
@@ -103,6 +121,44 @@ public final class Roles {
 
     /** @return 목록이 실제로 바뀌었으면 true(실패·무변화는 false). */
     private static boolean refreshNow() {
+        boolean franchiseChanged = refreshFranchiseStreamers();
+        return refreshOfficial() || franchiseChanged;
+    }
+
+    /** 가맹점 방송인 목록 — 가맹점 서버가 아니면 비운다. 실패하면 이전 값 유지. */
+    private static boolean refreshFranchiseStreamers() {
+        Set<UUID> before = franchiseStreamer;
+        if (!onFranchise()) {
+            franchiseStreamer = Set.of();
+            return !before.isEmpty();
+        }
+        try {
+            HttpRequest req = HttpRequest.newBuilder(URI.create(P2PConfig.signalingHttpUrl() + "/api/v1/stream/streamers"))
+                    .timeout(HTTP_TIMEOUT)
+                    .GET()
+                    .build();
+            HttpResponse<String> resp = CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() != 200) return false;
+            JsonObject o = GSON.fromJson(resp.body(), JsonObject.class);
+            Set<UUID> out = new java.util.HashSet<>();
+            if (o != null && o.has("streamer") && o.get("streamer").isJsonArray()) {
+                for (var e : o.getAsJsonArray("streamer")) {
+                    try {
+                        out.add(UUID.fromString(e.getAsString()));
+                    } catch (RuntimeException ignored) {
+                        // 형식이 틀린 항목은 건너뛴다
+                    }
+                }
+            }
+            franchiseStreamer = Set.copyOf(out);
+            return !before.equals(franchiseStreamer);
+        } catch (Exception e) {
+            LOGGER.debug("[roles] 가맹점 방송인 목록 받기 실패(무시): {}", e.getMessage());
+            return false;
+        }
+    }
+
+    private static boolean refreshOfficial() {
         try {
             HttpRequest req = HttpRequest.newBuilder(URI.create(P2PConfig.officialHttpUrl() + "/api/v1/roles"))
                     .timeout(HTTP_TIMEOUT)

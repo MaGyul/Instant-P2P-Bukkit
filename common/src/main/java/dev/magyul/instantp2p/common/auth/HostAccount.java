@@ -209,6 +209,10 @@ public final class HostAccount {
             LOG.debug("[auth] 시그널링 서버가 인증을 쓰지 않는다 — 토큰 없이 진행");
             return null;
         }
+        if (ch.statusCode() == 429) {
+            // 인증 무차별 대입 차단(가맹점 F3.1d~) — 너무 자주 물었다
+            throw new AuthException("시그널링 인증이 잠시 막혔습니다(HTTP 429) — 잠시 후 다시 시도해 주세요");
+        }
         String challenge = MicrosoftAuth.str(MicrosoftAuth.json(ch.body()), "challenge");
         if (ch.statusCode() != 200 || challenge == null) throw new AuthException("challenge 발급 실패 (HTTP " + ch.statusCode() + ")");
 
@@ -221,9 +225,27 @@ public final class HostAccount {
             throw new AuthException("Mojang 세션 등록 실패 (HTTP " + join.statusCode() + ")");
         }
 
-        HttpResponse<String> v = get(P2PConfig.signalingHttpUrl() + "/api/v1/auth/verify?username=" + MicrosoftAuth.enc(mc.name())
-                + "&challenge=" + MicrosoftAuth.enc(challenge), "계정 확인");
-        if (v.statusCode() == 403) throw new AuthException("이 계정은 시그널링 서버에서 방 열기가 차단되었습니다");
+        String verifyUrl = P2PConfig.signalingHttpUrl() + "/api/v1/auth/verify?username=" + MicrosoftAuth.enc(mc.name())
+                + "&challenge=" + MicrosoftAuth.enc(challenge);
+        HttpResponse<String> v = get(verifyUrl, "계정 확인");
+        if (v.statusCode() == 503) {
+            // 시그널링 서버가 Mojang hasJoined 응답을 못 받았다 — 한 번만 다시 묻는다 (가맹점 F3.3과 같게)
+            try {
+                Thread.sleep(2000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new AuthException("계정 확인이 중단되었습니다");
+            }
+            v = get(verifyUrl, "계정 확인");
+            if (v.statusCode() == 503) throw new AuthException("Mojang 서버 응답이 늦어 계정 확인을 못 했습니다 — 잠시 후 다시 시도해 주세요");
+        }
+        if (v.statusCode() == 403) {
+            // 403은 차단(banned)일 때만 차단으로 안내 — 그 밖엔 Mojang 확인 실패다
+            String err = MicrosoftAuth.str(MicrosoftAuth.json(v.body()), "error");
+            if (err != null && err.contains("banned")) throw new AuthException("이 계정은 시그널링 서버에서 방 열기가 차단되었습니다");
+            session = null; // Minecraft 토큰이 만료됐을 수 있다 — 다음엔 새로 받는다
+            throw new AuthException("Mojang 계정 확인에 실패했습니다 — 잠시 후 다시 열어 보고, 계속되면 /p2p logout 후 다시 로그인해 주세요");
+        }
         JsonObject vo = MicrosoftAuth.json(v.body());
         String token = MicrosoftAuth.str(vo, "token");
         if (v.statusCode() != 200 || token == null) throw new AuthException("계정 확인 실패 (HTTP " + v.statusCode() + ")");

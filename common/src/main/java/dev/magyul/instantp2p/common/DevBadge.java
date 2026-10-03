@@ -34,7 +34,8 @@ public final class DevBadge {
      */
     public static String roleSuffix(UUID id) {
         // 서버가 방장이라 자기 Roles 사본이 곧 기준이다 (원본 클라이언트의 RoomRoles — 방장이 내려준 등급 — 는 필요 없다)
-        if (Roles.isDev(id)) return "dev";
+        // 가맹점 개발자는 가맹점 서버에서 개발자와 같은 등급(3) — 가맹점 클라이언트가 배지는 따로 그린다
+        if (Roles.isDev(id) || Roles.isFranchiseDev(id)) return "dev";
         if (Roles.isSupporter(id)) return "supporter";
         if (Roles.isStreamer(id)) return "streamer";
         return null;
