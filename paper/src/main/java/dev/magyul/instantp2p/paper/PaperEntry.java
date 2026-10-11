@@ -9,6 +9,9 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 /**
  * Bukkit/Spigot/Paper 진입점 (plugin.yml). Paper 전용 API는 {@link ServerText}로 감싸서 Spigot에서도 로드된다.
  */
@@ -78,12 +81,22 @@ public final class PaperEntry extends JavaPlugin {
         Bukkit.getScheduler().runTask(this, () -> core.host().autoStart());
     }
 
-    /** room_update.version — 클라이언트가 문자열 비교한다. getBukkitVersion()은 "1.21.11-R0.1-SNAPSHOT" 형식(Paper/Spigot 공통). */
+    /**
+     * room_update.version — 클라이언트가 문자열 비교한다. Paper는 바닐라 버전 이름({@code getMinecraftVersion()}),
+     * Spigot은 getBukkitVersion()의 앞쪽 숫자 부분. getBukkitVersion()은 1.21.x까지 "1.21.11-R0.1-SNAPSHOT"이었지만
+     * Paper 26.x는 "26.3.build.133-alpha" 형식이라 '-' 앞을 그대로 쓰면 클라이언트에 버전 불일치로 보인다.
+     */
     private static String minecraftVersion() {
-        String bukkit = Bukkit.getBukkitVersion();
-        int dash = bukkit.indexOf('-');
-        return dash > 0 ? bukkit.substring(0, dash) : bukkit;
+        try {
+            return Bukkit.getMinecraftVersion();
+        } catch (NoSuchMethodError e) {
+            // Spigot
+        }
+        Matcher m = LEADING_VERSION.matcher(Bukkit.getBukkitVersion());
+        return m.lookingAt() ? m.group() : Bukkit.getBukkitVersion();
     }
+
+    private static final Pattern LEADING_VERSION = Pattern.compile("\\d+(?:\\.\\d+)*");
 
     /** CraftServer.getServer() → MinecraftServer(DedicatedServer). Paper/Spigot 공통, 이름은 Bukkit 구현 쪽이라 매핑과 무관. */
     private Object minecraftServer() {

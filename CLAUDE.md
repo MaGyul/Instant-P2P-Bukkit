@@ -49,7 +49,8 @@ kwik(+agent15, hkdf, siphash)은 `implementation` — 각 플랫폼 shadow jar�
 ### `paper` (`dev.magyul.instantp2p.paper`) — Paper/Spigot 공용, `plugin.yml`
 `PaperEntry`, `PaperPlatform`, `PaperSettings`(`config.yml`), `InstantP2pListener`, `P2PNet`(채널 등록),
 `ServerText`(Paper는 `AdventureText`, Spigot은 `LegacyText` — Adventure 참조는 `AdventureText`에만).
-MC 버전은 `Bukkit.getBukkitVersion()`(`getMinecraftVersion()`은 Paper 전용). 1.21 미만이면 비활성화.
+MC 버전은 Paper면 `getMinecraftVersion()`, Spigot은 `Bukkit.getBukkitVersion()`의 앞쪽 숫자 부분
+(Paper 26.x의 getBukkitVersion은 `26.3.build.133-alpha` 형식 — '-' 앞만 자르면 room_update.version이 틀려 목록에 빨간 버전으로 보였다). 1.21 미만이면 비활성화.
 **`getConfig()/reloadConfig()/saveConfig()` 금지** — 문법 오류면 예외 없이 빈 설정을 돌려줘서, serverUuid를 새로 만들어 저장하는 순간
 사용자 파일이 기본값으로 덮인다(실제로 겪음). `PaperSettings`가 `YamlConfiguration.load`로 직접 파싱하고, 오류면 예외·파일 무변경.
 
