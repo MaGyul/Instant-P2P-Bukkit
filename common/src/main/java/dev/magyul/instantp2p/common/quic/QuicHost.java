@@ -20,6 +20,7 @@ import tech.kwik.core.send.SendStatistics;
 import tech.kwik.core.server.ApplicationProtocolConnection;
 import tech.kwik.core.server.ApplicationProtocolConnectionFactory;
 import tech.kwik.core.server.ServerConnection;
+import tech.kwik.core.server.ServerConnectionConfig;
 import tech.kwik.core.server.ServerConnector;
 import tech.kwik.core.server.impl.ServerConnectorImpl;
 
@@ -217,6 +218,17 @@ public final class QuicHost {
 
         server = ServerConnector.builder()
                 .withSocket(agent.socket())
+                // [1.3.0] 원본 1.5.1과 같은 명시 설정 — 특히 retryRequired(주소 검증용 Retry 한 번): 위조된 출발 주소로 연결을 쏟아 내는 공격을 막는다
+                .withConfiguration(ServerConnectionConfig.builder()
+                        .maxIdleTimeoutInSeconds(30)
+                        .maxUnidirectionalStreamBufferSize(1_000_000L)
+                        .maxBidirectionalStreamBufferSize(1_000_000L)
+                        .maxConnectionBufferSize(10_000_000L)
+                        .maxOpenPeerInitiatedUnidirectionalStreams(10)
+                        .maxOpenPeerInitiatedBidirectionalStreams(100)
+                        .retryRequired(true)
+                        .connectionIdLength(8)
+                        .build())
                 .withKeyStore(id.keyStore(), QuicCert.ALIAS, QuicCert.PASSWORD)
                 .withSupportedVersion(QuicConnection.QuicVersion.V1)
                 .withLogger(KwikLog.quiet())
@@ -224,6 +236,9 @@ public final class QuicHost {
         server.registerApplicationProtocol(ALPN, new TunnelFactory());
         server.start();
         LOG.info("[quic-host] listening room={} udpPort={} target={}:{}", roomId, agent.localPort(), targetHost, targetPort);
+        // [1.3.0] 원본 1.5.1: 서버가 며칠씩 켜져 있어도 후보가 틀어지지 않게 — 공인 주소 변화 감시(30초), 중계 경로 점검(60초)
+        agent.startReflexRefresh(30_000L, this::onReflexive);
+        agent.startRelayWatch(60_000L, () -> candidates = agent.withCurrentRelay(candidates));
         worker.execute(this::openLobby);
         // [1.3.0] 하트비트 — 공개 방은 이게 끊기면 목록에서 빠진다(notice: nolog)
         watchdog.scheduleAtFixedRate(() -> {
@@ -233,6 +248,18 @@ public final class QuicHost {
                 LOG.debug("[host] heartbeat 실패: {}", e.toString());
             }
         }, HEARTBEAT_FIRST_MS, HEARTBEAT_EVERY_MS, TimeUnit.MILLISECONDS);
+    }
+
+    /** 공인 주소가 바뀌었으면 후보를 새로 만든다 — 이후 접속자부터 새 주소를 쓴다. */
+    private void onReflexive(InetSocketAddress mapped) {
+        QuicIce agent = ice;
+        if (agent == null || !running.get()) return;
+        List<QuicIce.Candidate> fresh = agent.regather(mapped);
+        List<QuicIce.Candidate> cur = agent.withCurrentRelay(candidates);
+        if (!new java.util.HashSet<>(fresh).equals(new java.util.HashSet<>(cur))) {
+            candidates = fresh;
+            LOG.info("[quic-host] 공인/로컬 주소가 바뀌어 후보를 새로 만들었다 — 이후 접속자부터 새 주소를 쓴다");
+        }
     }
 
     // ── [1.3.0] 방 정보 / 방 기록 / 접속자 알림 (원본 1.5.1) ──────────────────────

@@ -259,6 +259,143 @@ final class QuicIce {
         return "relay".equals(c.type()) || socket.hasRelayChannel(c.address());
     }
 
+    // ── [1.3.0] 원본 1.5.1: 공인 주소 변화 감시 · 중계 경로 점검 ─────────────────────
+
+    /** 공인 주소 확인 요청(STUN) — 응답이 오면 {@link #handleReflexResponse}가 콜백에 넘긴다. */
+    private record Reflex(InetSocketAddress server, java.util.function.Consumer<InetSocketAddress> cb) {}
+
+    private final Map<String, Reflex> reflexWaiting = new ConcurrentHashMap<>();
+    private volatile boolean selfSeen;
+    private volatile String selfTx;
+
+    /**
+     * {@code periodMs}마다 STUN 서버에 Binding 요청을 보내 우리 공인 주소(srflx)를 다시 본다. 공인 IP·포트가 바뀌면(공유기 재부팅,
+     * 회선 교체, NAT 매핑 만료) 알려 준 후보가 틀어져 새 접속자가 못 붙는다 — 콜백이 후보를 새로 만든다. 서버가 며칠씩 켜져 있을 때 중요하다.
+     */
+    void startReflexRefresh(long periodMs, java.util.function.Consumer<InetSocketAddress> onResult) {
+        InetSocketAddress server = parseStunUrl(stunUrl);
+        if (server == null) return;
+        Thread t = new Thread(() -> {
+            while (!closed.get()) {
+                try {
+                    Thread.sleep(periodMs);
+                    byte[] tx = Stun.newTransactionId();
+                    String k = key(tx);
+                    if (reflexWaiting.size() > 8) reflexWaiting.clear();
+                    reflexWaiting.put(k, new Reflex(server, onResult));
+                    socket.send(Stun.packet(Stun.bindingRequest(tx), server));
+                    Thread.sleep(3_000);
+                    reflexWaiting.remove(k);
+                } catch (InterruptedException e) {
+                    return;
+                } catch (IOException ignored) {
+                    // 다음 주기에 다시
+                }
+            }
+        }, "quic-ice-reflex");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /** STUN 서버의 응답이면 콜백에 매핑된 주소를 넘기고 true(여기서 처리했다). */
+    private boolean handleReflexResponse(byte[] buf, int off, int len, InetSocketAddress from) {
+        if (reflexWaiting.isEmpty() || !Stun.looksLikeStun(buf, off, len) || !Stun.isSuccess(buf, off)) return false;
+        Reflex r = reflexWaiting.remove(key(Stun.transactionId(buf, off)));
+        if (r == null) return false;
+        if (!addrKey(r.server()).equals(addrKey(from))) return true; // 다른 곳에서 온 응답은 무시
+        InetSocketAddress mapped = Stun.mappedAddress(buf, off, len);
+        if (mapped != null) r.cb().accept(mapped);
+        return true;
+    }
+
+    /** {@link #gather()}와 같은 후보 목록을 STUN 재조회 없이 주어진 srflx로 다시 만든다. */
+    List<Candidate> regather(InetSocketAddress srflx) {
+        Set<Candidate> out = new LinkedHashSet<>();
+        int port = socket.getLocalPort();
+        if (!SRFLX_ONLY) {
+            for (String ip : localAddresses()) out.add(new Candidate(ip, port, "host"));
+        }
+        if (srflx != null) out.add(new Candidate(srflx.getAddress().getHostAddress(), srflx.getPort(), "srflx"));
+        TurnAllocation alloc = turn;
+        if (alloc != null && alloc.relayedAddress() != null) {
+            InetSocketAddress r = alloc.relayedAddress();
+            out.add(new Candidate(r.getAddress().getHostAddress(), r.getPort(), "relay"));
+        }
+        return new ArrayList<>(out);
+    }
+
+    boolean hasTurn() {
+        return turn != null;
+    }
+
+    /**
+     * 중계 경로 자가 점검 — 우리 중계 주소로 우리가 Binding 요청을 보내 중계 서버를 한 바퀴 돌아 돌아오는지 본다
+     * (채널 바인딩된 자기 주소 → ChannelData → 서버 → 우리 relay 주소 → 다시 우리). 돌아오면 중계가 살아 있다.
+     */
+    boolean relaySelfCheck(long timeoutMs) {
+        TurnAllocation alloc = turn;
+        InetSocketAddress me = alloc != null ? alloc.relayedAddress() : null;
+        if (me == null || alloc.bindChannel(me) < 0) return false;
+        byte[] tx = Stun.newTransactionId();
+        selfSeen = false;
+        selfTx = key(tx);
+        try {
+            socket.send(Stun.packet(Stun.bindingRequest(tx), me));
+            long end = System.currentTimeMillis() + timeoutMs;
+            while (!selfSeen && System.currentTimeMillis() < end && !closed.get()) Thread.sleep(20);
+            return selfSeen;
+        } catch (IOException e) {
+            return false;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        } finally {
+            selfTx = null;
+        }
+    }
+
+    /**
+     * {@code periodMs}마다 {@link #relaySelfCheck}를 한다. 한 번이라도 통과한 뒤 연속 3번 실패하면 중계 할당을 반납하고 새로 잡는다
+     * ({@link TurnAllocation#recycle}) — 서버는 할당이 살아 있다고 답하는데 실제로는 못 쓰는 "조용히 죽은 중계"로 초대 코드가
+     * 마비되던 증상(원본 1.5.1이 고친 것)을 되살린다. 한 번도 통과한 적 없으면(중계 서버가 자기 주소 되돌리기를 막는 환경) 건드리지 않는다.
+     */
+    void startRelayWatch(long periodMs, Runnable onRecycled) {
+        Thread t = new Thread(() -> {
+            boolean worked = false;
+            int fails = 0;
+            int neverWorked = 0;
+            try {
+                Thread.sleep(Math.min(periodMs, 8_000L));
+                for (; !closed.get(); Thread.sleep(periodMs)) {
+                    if (turn == null) continue;
+                    boolean ok = relaySelfCheck(3_000);
+                    if (ok) {
+                        if (!worked) LOG.info("[ice] 중계 경로 점검 통과 — 이후 {}초마다 확인한다", periodMs / 1000);
+                        worked = true;
+                        fails = 0;
+                        neverWorked = 0;
+                    } else if (!worked) {
+                        // 이 중계 서버가 자기 주소로 되돌려 주지 않는 환경이면 영원히 통과하지 못한다 — 그럴 땐 점검을 하지 않은 것과 같다(할당을 건드리지 않는다)
+                        if (++neverWorked == 5) LOG.info("[ice] 중계 경로 자가 점검이 이 환경에서는 통과한 적이 없다 — 되살리기(할당 새로 잡기)는 하지 않는다");
+                    } else if (++fails >= 3) {
+                        LOG.warn("[ice] 중계 경로 점검이 연속 {}번 실패했다 — 중계 할당을 새로 잡는다", fails);
+                        TurnAllocation a = turn;
+                        if (a != null && a.recycle()) {
+                            onRecycled.run();
+                            LOG.info("[ice] 중계 할당을 새로 잡았다 — 새 접속자부터 새 중계 주소를 쓴다");
+                            worked = false;
+                        }
+                        fails = 0;
+                    }
+                }
+            } catch (InterruptedException ignored) {
+                // 종료
+            }
+        }, "quic-ice-relaywatch");
+        t.setDaemon(true);
+        t.start();
+    }
+
     // ── 후보 수집 ────────────────────────────────────────────────────────────
 
     /**
@@ -621,6 +758,11 @@ final class QuicIce {
         InetSocketAddress from = (InetSocketAddress) p.getSocketAddress();
 
         if (Stun.isRequest(buf, off)) {
+            String st = selfTx;
+            if (st != null && st.equals(key(Stun.transactionId(buf, off)))) { // 우리가 보낸 중계 자가 점검이 돌아왔다
+                selfSeen = true;
+                return;
+            }
             // 상대의 연결성 확인 — 응답해 줘야 상대도 자기 경로를 확정할 수 있다.
             byte[] resp = Stun.bindingSuccess(Stun.transactionId(buf, off), from);
             if (resp != null) {
@@ -629,6 +771,7 @@ final class QuicIce {
             return;
         }
         if (!Stun.isSuccess(buf, off)) return;
+        if (handleReflexResponse(buf, off, p.getLength(), from)) return; // 공인 주소 재확인 응답
 
         String tx = key(Stun.transactionId(buf, off));
         Probe pr = probes.remove(tx);

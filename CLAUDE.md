@@ -182,6 +182,11 @@ Fabric 클라이언트 GameTest는 사람 입력을 막아 AuthMe 로그인이 �
 - AuthMe의 중첩 jar(`META-INF/jars`)는 `libs/`에 풀어 둔다(Loom이 개발 환경에서 안 풀어 줌, gitignore).
 - 결과는 클라이언트 로그의 `[P2PTest] RESULT PASS|FAIL …`. 서버 로그의 `join detected → punch done → QUIC connection accepted`로 서버 쪽도 확인.
 
+- **장시간 연결 유지(1.5.1)**: `QuicIce.startReflexRefresh`(30초마다 STUN으로 공인 주소 재확인 → `QuicHost.onReflexive`가 후보를 새로 만든다), `startRelayWatch`(60초마다 `relaySelfCheck` — 자기 중계 주소로 보낸 STUN 요청이 돌아오는지;
+  한 번 통과한 뒤 연속 3번 실패하면 `TurnAllocation.recycle`). 이 서버(공식 coturn)에서는 첫 점검(방 연 지 8초)은 실패하고 이후 통과한다 — 한 번도 통과한 적 없으면 할당을 건드리지 않는다(원본과 같음, 5번 실패하면 안내 로그 한 번).
+  `TurnAllocation`: 권한 256·채널 128 상한(45초 이상 안 쓴 채널부터 비움). `ServerConnectionConfig`를 명시하고 `retryRequired(true)`(원본과 같음) — 직결·중계 입장 확인.
+- 미구현(원본 1.5의 신고 기능): 시그널링 서버가 방장에게 묻는 `chatquery`/`signquery`/`bookquery`에 답하지 않는다.
+
 ## 건드리면 안 되는 것 (원본 모드 1.4.3과의 호환)
 
 - 인프라: 시그널링 `wss://kite-private-cloud.kro.kr`(평문 8090은 닫힘, 가맹점은 `p2p.sionserver.com` + TURN `turn.sionserver.com` — 같은 구조), STUN/TURN `:3490`(TURN 계정은 `/api/v1/turn/credentials?token=`로 발급, 고정 계정 없음).

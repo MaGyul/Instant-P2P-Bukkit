@@ -91,6 +91,13 @@ final class TurnAllocation {
     private final Map<String, CompletableFuture<byte[]>> pending = new ConcurrentHashMap<>();
 
     /** 권한을 건 상대 — 채널이 없어도 갱신해야 한다(권한 수명 300초, RFC 5766 §8). */
+    /** [1.3.0] 원본 1.5.1: 권한 256개·채널 128개 상한 — 공개 방에서 접속자가 쏟아져도 무한히 늘지 않게. */
+    private static final int MAX_PERMITTED = 256;
+    private static final int MAX_CHANNELS = 128;
+    /** 채널을 비울 때 이만큼 안 쓴 것만 대상으로 한다. */
+    private static final long CHANNEL_IDLE_MS = 45_000L;
+    private final Map<String, Long> lastUsed = new ConcurrentHashMap<>();
+    private volatile long lastChannelCapWarn;
     private final java.util.Set<String> permitted = ConcurrentHashMap.newKeySet();
 
     /** 상대 → 배정된 채널 번호. */
@@ -277,6 +284,16 @@ final class TurnAllocation {
      */
     boolean createPermission(InetSocketAddress peer) {
         if (cred == null || relayed == null) return false;
+        if (permitted.size() >= MAX_PERMITTED && !permitted.contains(key(peer))) {
+            int drop = 64; // 채널이 안 붙은 권한부터 64개 비운다
+            for (String k : permitted) {
+                if (drop-- <= 0) break;
+                if (!channels.containsKey(k)) {
+                    permitted.remove(k);
+                    addresses.remove(k);
+                }
+            }
+        }
         addresses.put(key(peer), peer);
         permitted.add(key(peer));
         byte[] r = signed((tx, c) -> Turn.createPermission(tx, c, peer));
@@ -309,16 +326,26 @@ final class TurnAllocation {
         if (cred == null || relayed == null) return -1;
         Integer existing = channels.get(key(peer));
         if (existing != null) return existing;
+        if (channels.size() >= MAX_CHANNELS && !evictIdleChannel()) {
+            long now = System.currentTimeMillis();
+            if (now - lastChannelCapWarn > 60_000) {
+                lastChannelCapWarn = now;
+                LOG.warn("[turn] 채널 {}개가 모두 사용 중이라 새 상대에게 채널을 못 준다", MAX_CHANNELS);
+            }
+            return -1;
+        }
         int channel = nextChannel.getAndIncrement();
         if (channel > Turn.CHANNEL_MAX) {
             LOG.warn("[turn] 채널 번호가 고갈됐다");
             return -1;
         }
         addresses.put(key(peer), peer);
+        lastUsed.put(key(peer), System.currentTimeMillis());
         byte[] r = signed((tx, c) -> Turn.channelBind(tx, c, channel, peer));
         boolean ok = r != null && Turn.isSuccess(r, 0);
         if (!ok) {
             LOG.info("[turn] channelBind 실패 code={}", code(r));
+            nextChannel.compareAndSet(channel + 1, channel); // 번호를 낭비하지 않는다
             return -1;
         }
         LOG.debug("[turn] channelBind 성공 — 이후 4바이트 헤더로 중계");
@@ -365,14 +392,20 @@ final class TurnAllocation {
 
     /** 이 상대에게 배정된 채널 번호, 없으면 -1. */
     int channelFor(InetSocketAddress peer) {
-        Integer c = channels.get(key(peer));
-        return c != null ? c : -1;
+        String k = key(peer);
+        Integer c = channels.get(k);
+        if (c == null) return -1;
+        lastUsed.put(k, System.currentTimeMillis());
+        return c;
     }
 
     /** 이 채널 번호에 붙은 상대, 없으면 null. */
     InetSocketAddress peerForChannel(int channel) {
         for (Map.Entry<String, Integer> e : channels.entrySet()) {
-            if (e.getValue() == channel) return addresses.get(e.getKey());
+            if (e.getValue() == channel) {
+                lastUsed.put(e.getKey(), System.currentTimeMillis());
+                return addresses.get(e.getKey());
+            }
         }
         return null;
     }
@@ -497,6 +530,43 @@ final class TurnAllocation {
             lastRealloc = System.currentTimeMillis();
             reallocating.set(false);
         }
+    }
+
+    /**
+     * [1.3.0] 원본 1.5.1: 할당을 일부러 반납(Refresh 0)하고 새로 잡는다 — 중계 경로 점검({@link QuicIce#startRelayWatch})이
+     * 연속으로 실패했을 때, 서버는 allocation이 살아 있다고 답하는데 실제로는 못 쓰는 상태(조용히 죽은 할당)를 되살린다.
+     *
+     * @return 새로 잡았으면 true
+     */
+    boolean recycle() {
+        if (closed.get() || !reallocating.compareAndSet(false, true)) return false;
+        try {
+            signed((tx, c) -> Turn.refresh(tx, c, 0));
+            return reallocate();
+        } finally {
+            lastRealloc = System.currentTimeMillis();
+            reallocating.set(false);
+        }
+    }
+
+    /** 채널이 상한에 닿았을 때 가장 오래 안 쓴 채널을 비운다(45초 이상 안 쓴 것만). */
+    private synchronized boolean evictIdleChannel() {
+        long now = System.currentTimeMillis();
+        String oldest = null;
+        long oldestAt = Long.MAX_VALUE;
+        for (String k : channels.keySet()) {
+            long at = lastUsed.getOrDefault(k, 0L);
+            if (at < oldestAt) {
+                oldestAt = at;
+                oldest = k;
+            }
+        }
+        if (oldest == null || now - oldestAt < CHANNEL_IDLE_MS) return false;
+        channels.remove(oldest);
+        lastUsed.remove(oldest);
+        if (!permitted.contains(oldest)) addresses.remove(oldest);
+        LOG.info("[turn] 채널 상한({})에 닿아 가장 오래 안 쓴 채널을 비웠다", MAX_CHANNELS);
+        return true;
     }
 
     /** 서버가 allocation 을 잃었을 때 같은 소켓·계정으로 다시 잡고, 채널·권한을 <b>그 자리에서</b> 다시 건다. */
