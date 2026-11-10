@@ -47,7 +47,7 @@ public final class ModVersion {
     }
 
     /** 설정 값이 버전이면 그대로, auto면 시그널링 서버 값(블로킹 HTTP — announce 스레드에서만 부른다). */
-    static String resolve(String configured) {
+    public static String resolve(String configured) {
         if (!isAuto(configured)) return configured.trim();
         String v = fetched;
         if (v != null) return v;

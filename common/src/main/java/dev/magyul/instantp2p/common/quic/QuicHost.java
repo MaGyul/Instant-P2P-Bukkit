@@ -2,7 +2,9 @@ package dev.magyul.instantp2p.common.quic;
 
 import dev.magyul.instantp2p.common.Utils;
 import dev.magyul.instantp2p.common.core.P2PCore;
+import dev.magyul.instantp2p.common.signaling.ClientInfo;
 import dev.magyul.instantp2p.common.signaling.HardwareId;
+import dev.magyul.instantp2p.common.signaling.ModVersion;
 import dev.magyul.instantp2p.common.signaling.P2PConfig;
 import dev.magyul.instantp2p.common.signaling.VillasMsg;
 import dev.magyul.instantp2p.common.signaling.HandshakeRejectedException;
@@ -259,6 +261,7 @@ public final class QuicHost {
         String token = core.account().publishTokenOrNull();
         String url = P2PConfig.signalingUrl() + "/rv/" + roomId + "/host?key=" + hostKey
                 + (token != null ? "&token=" + URLEncoder.encode(token, StandardCharsets.UTF_8) : "")
+                + ClientInfo.query(ModVersion.resolve(core.settings().targetModVersion()), core.platform().minecraftVersion())
                 + HardwareId.query(); // 가맹점 서버일 때만 붙는다(가맹점 수정판과 같게)
         WebSocketClient ws = new WebSocketClient(url) {
             @Override public void onConnected() {
