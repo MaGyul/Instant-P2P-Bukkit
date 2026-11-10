@@ -58,6 +58,8 @@ public final class P2PCore {
     private final Map<UUID, Long> tunnelLogins = new ConcurrentHashMap<>();
 
     public P2PCore(P2PPlatform platform) {
+        // 다른 TLS/HTTP 클라이언트가 만들어지기 전에 — 패치 안 된 Java면 교체형 TrustManager를 먼저 깔아 둔다
+        JreGuard.init(platform.dataFolder());
         this.platform = platform;
         this.expel = new ExpelManager(platform, this::broadcastRoomState);
         this.bridge = new P2PBridge(this);

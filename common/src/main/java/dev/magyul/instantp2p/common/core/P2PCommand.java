@@ -26,6 +26,7 @@ import java.util.stream.Collectors;
  *   /p2p reload     설정 파일 다시 읽기
  *   /p2p max-players [on|off|set &lt;인원&gt;]   P2P 최대 인원 (설정 파일에 저장)
  *   /p2p server [official|franchise [accept|deny]]   방을 올릴 서버 (가맹점은 약관 동의, 설정 파일에 저장)
+ *   /p2p java [fix [always]|ignore|forget]   Java 취약점(CVE-2026-91403) 점검·우회 선택
  * </pre>
  * 권한: {@value #PERMISSION} (Fabric은 op).
  */
@@ -33,9 +34,10 @@ public final class P2PCommand {
 
     public static final String NAME = "p2p";
     public static final String PERMISSION = "instantp2p.admin";
-    public static final List<String> SUBCOMMANDS = List.of("status", "login", "logout", "open", "close", "code", "newcode", "reload", "max-players", "server");
+    public static final List<String> SUBCOMMANDS = List.of("status", "login", "logout", "open", "close", "code", "newcode", "reload", "max-players", "server", "java");
     public static final List<String> MAX_PLAYERS_ACTIONS = List.of("on", "off", "set");
     public static final List<String> SERVERS = List.of("official", "franchise");
+    public static final List<String> JAVA_ACTIONS = List.of("fix", "ignore", "forget");
     public static final List<String> TERMS_ACTIONS = List.of("accept", "deny");
 
     private static final String K = "instant-p2p-server.";
@@ -66,6 +68,7 @@ public final class P2PCommand {
             case "reload" -> host.reload(sender);
             case "max-players" -> maxPlayers(core, sender, args);
             case "server" -> server(core, sender, args);
+            case "java" -> java(sender, args);
             default -> sender.send(K + "usage");
         }
     }
@@ -86,6 +89,13 @@ public final class P2PCommand {
         if (args.length == 2 && args[0].equalsIgnoreCase("server")) {
             String prefix = args[1].toLowerCase(Locale.ROOT);
             return SERVERS.stream().filter(s -> s.startsWith(prefix)).toList();
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("java")) {
+            String prefix = args[1].toLowerCase(Locale.ROOT);
+            return JAVA_ACTIONS.stream().filter(s -> s.startsWith(prefix)).toList();
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("java") && args[1].equalsIgnoreCase("fix")) {
+            return "always".startsWith(args[2].toLowerCase(Locale.ROOT)) ? List.of("always") : List.of();
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("server") && args[1].equalsIgnoreCase("franchise")) {
             String prefix = args[2].toLowerCase(Locale.ROOT);
@@ -129,6 +139,51 @@ public final class P2PCommand {
                 }
             }
             default -> sender.send(K + "server.usage");
+        }
+    }
+
+    /**
+     * {@code /p2p java [fix [always]|ignore|forget]} — Java 취약점(CVE-2026-91403) 점검과 선택.
+     * 인자가 없으면 상태만 보여 준다. {@code fix}는 문제 루트 인증서를 이 서버 프로세스의 기본 TLS 신뢰 목록에서 뺀다
+     * (다른 플러그인에도 적용된다). {@code fix always}는 다음 시작부터도 자동으로 적용한다.
+     */
+    private static void java(P2PSender sender, String[] args) {
+        String action = args.length > 1 ? args[1].toLowerCase(Locale.ROOT) : "";
+        boolean always = args.length > 2 && args[2].equalsIgnoreCase("always");
+        switch (action) {
+            case "" -> javaStatus(sender);
+            case "fix" -> {
+                if (JreGuard.level() != JreGuard.Level.VULNERABLE && JreGuard.patch() != JreGuard.Patch.MITIGATED) {
+                    sender.send(K + "jre.not_needed", JreGuard.currentText());
+                } else if (JreGuard.fixNow(always)) {
+                    sender.send(K + (always ? "jre.fixed_always" : "jre.fixed"));
+                } else {
+                    sender.send(K + "jre.fix_failed", JreGuard.currentText(), JreGuard.DOWNLOAD_URL);
+                }
+            }
+            case "ignore" -> {
+                if (JreGuard.level() != JreGuard.Level.VULNERABLE) {
+                    sender.send(K + "jre.not_needed", JreGuard.currentText());
+                } else {
+                    JreGuard.ignoreThisRun();
+                    sender.send(K + "jre.ignored");
+                }
+            }
+            case "forget" -> {
+                JreGuard.clearAutofix();
+                sender.send(K + "jre.forgot");
+            }
+            default -> sender.send(K + "jre.usage");
+        }
+    }
+
+    private static void javaStatus(P2PSender sender) {
+        String now = JreGuard.currentText();
+        switch (JreGuard.level()) {
+            case OK -> sender.send(K + (JreGuard.patch() == JreGuard.Patch.MITIGATED ? "jre.status_mitigated" : "jre.status_ok"), now);
+            case WARN -> sender.send(K + "jre.status_warn", now);
+            case VULNERABLE -> sender.send(K + (JreGuard.isIgnoringThisRun() ? "jre.status_ignored" : "jre.status_vulnerable"),
+                    now, JreGuard.affectedText(), JreGuard.DOWNLOAD_URL);
         }
     }
 
@@ -264,6 +319,7 @@ public final class P2PCommand {
         sender.send(K + (core.settings().enabled() ? "status.auto_on" : "status.auto_off"));
         maxPlayersStatus(core, sender);
         serverStatus(core, sender);
+        if (JreGuard.level() != JreGuard.Level.OK || JreGuard.patch() == JreGuard.Patch.MITIGATED) javaStatus(sender);
     }
 
     /** P2P로 들어와 있는 플레이어와 연결 방식 — IP는 보여 주지 않는다(방송 화면에 띄워도 되게) */

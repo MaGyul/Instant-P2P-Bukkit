@@ -155,7 +155,7 @@
   "instant-p2p.msg.signaling_unreachable": "§cServer maintenance §f(signaling failed) §c- retrying; players may not connect until it recovers",
   "instant-p2p.msg.signaling_recovered": "§aReconnected to the signaling server",
   "instant-p2p.msg.ip_restore_unavailable": "§cPlayer IP restoration is not supported on this server version and has been disabled. Connections still work. Please report this to the developer with your server type and version.",
-  "instant-p2p-server.usage": "§e/p2p <status|login|logout|open|close|code|newcode|reload|max-players|server>",
+  "instant-p2p-server.usage": "§e/p2p <status|login|logout|open|close|code|newcode|reload|max-players|server|java>",
   "instant-p2p-server.status.account": "§7Account: §f%s",
   "instant-p2p-server.status.pending": "§7Account: §ewaiting for login §7(/p2p login to see the code again)",
   "instant-p2p-server.status.logged_out": "§7Account: §cnot logged in §7(/p2p login)",
@@ -226,5 +226,18 @@
   "instant-p2p-server.host.rejected": "§cThe signaling server refused to open the room: %s §7(fix the cause, then /p2p close → /p2p open)",
   "instant-p2p-server.host.flood_on": "§cUDP packets are flooding in from unknown addresses and are being filtered. Players who are connected or connecting are not affected; this lifts automatically after 5 minutes.",
   "instant-p2p-server.host.cooldown": "§eThe signaling server temporarily blocked opening rooms (too many opens/closes). Retrying automatically in about %s minute(s).",
-  "instant-p2p-server.host.flood_off": "§aThe packet flood has stopped; the defense is lifted."
+  "instant-p2p-server.host.flood_off": "§aThe packet flood has stopped; the defense is lifted.",
+  "instant-p2p-server.jre.blocked": "§cThis server's Java (%s) is not patched for CVE-2026-91403, so the room was not opened. Update Java or choose with §e/p2p java§c.",
+  "instant-p2p-server.jre.not_needed": "§aThis Java (%s) is patched or unaffected; nothing to do.",
+  "instant-p2p-server.jre.fixed": "§aThe affected certificates are blocked from now on. §7(They were removed from the whole server process's TLS trust list, so other plugins are affected too. Not needed once Java is updated.)",
+  "instant-p2p-server.jre.fixed_always": "§aThe affected certificates are blocked and this will be applied on every start. §7(Removed from the whole server process's TLS trust list. To undo: /p2p java forget, then restart.)",
+  "instant-p2p-server.jre.fix_failed": "§cCould not change this Java's (%s) trust list. Please update Java: %s",
+  "instant-p2p-server.jre.ignored": "§eRoom opening is allowed for this run only, at your own risk. The signaling server may still refuse.",
+  "instant-p2p-server.jre.forgot": "§aThe saved auto-apply (fix always) was removed. It will not be applied from the next start.",
+  "instant-p2p-server.jre.usage": "§e/p2p java [fix [always]|ignore|forget]",
+  "instant-p2p-server.jre.status_ok": "§aJava %s: not affected by CVE-2026-91403",
+  "instant-p2p-server.jre.status_mitigated": "§eJava %s: not patched for CVE-2026-91403 — the affected certificates are blocked (updating Java is recommended)",
+  "instant-p2p-server.jre.status_warn": "§eJava %s: security-update status cannot be verified for this version. An LTS version is recommended.",
+  "instant-p2p-server.jre.status_vulnerable": "§cJava %s: not patched for CVE-2026-91403 (needs newer than %s) — opening rooms is blocked. Update Java (%s) or /p2p java fix | ignore",
+  "instant-p2p-server.jre.status_ignored": "§eJava %s: not patched for CVE-2026-91403 — allowed for this run at your own risk (needs newer than %s, %s)"
 }

@@ -126,6 +126,10 @@ public final class HostController {
 
     /** @param forcePublic {@code /p2p open publicRoom} — 이번 방은 설정과 관계없이 공개 방으로 (열려 있으면 지금 올린다) */
     public void open(P2PSender sender, boolean forcePublic) {
+        if (JreGuard.blocksP2p()) { // 패치 안 된 Java — 운영자가 /p2p java 로 고르기 전에는 열지 않는다
+            sender.send(K + "jre.blocked", JreGuard.currentText());
+            return;
+        }
         if (core.account().state() != HostAccount.State.LOGGED_IN) {
             sender.send(K + "open.need_login");
             return;

@@ -155,7 +155,7 @@
   "instant-p2p.msg.signaling_unreachable": "§c서버 점검 중입니다 §f(시그널링 연결 실패) §c— 재시도 중, 복구까지 접속이 안 될 수 있습니다",
   "instant-p2p.msg.signaling_recovered": "§a시그널링 서버에 다시 연결되었습니다",
   "instant-p2p.msg.ip_restore_unavailable": "§c이 서버 버전에서는 접속자 IP 복원을 할 수 없어 꺼졌습니다. 접속은 정상입니다. 서버 종류·버전과 함께 개발자에게 문의해 주세요.",
-  "instant-p2p-server.usage": "§e/p2p <status|login|logout|open|close|code|newcode|reload|max-players|server>",
+  "instant-p2p-server.usage": "§e/p2p <status|login|logout|open|close|code|newcode|reload|max-players|server|java>",
   "instant-p2p-server.status.account": "§7계정: §f%s",
   "instant-p2p-server.status.pending": "§7계정: §e로그인 대기 중 §7(/p2p login 으로 코드 다시 보기)",
   "instant-p2p-server.status.logged_out": "§7계정: §c로그인 안 됨 §7(/p2p login)",
@@ -226,5 +226,18 @@
   "instant-p2p-server.host.rejected": "§c시그널링 서버가 방 열기를 거부했습니다: %s §7(원인을 해결한 뒤 /p2p close → /p2p open)",
   "instant-p2p-server.host.flood_on": "§c모르는 주소에서 UDP 패킷이 몰려들고 있어 걸러냅니다. 이미 접속했거나 접속 중인 사람은 영향이 없고, 5분 뒤 자동으로 풀립니다.",
   "instant-p2p-server.host.cooldown": "§e시그널링 서버가 방을 너무 자주 열고 닫아 잠시 막았습니다. 약 %s분 뒤 자동으로 다시 시도합니다.",
-  "instant-p2p-server.host.flood_off": "§a패킷 폭주가 멎어 방어를 풀었습니다."
+  "instant-p2p-server.host.flood_off": "§a패킷 폭주가 멎어 방어를 풀었습니다.",
+  "instant-p2p-server.jre.blocked": "§c이 서버의 Java(%s)는 CVE-2026-91403 패치가 안 되어 방을 열지 않았습니다. Java를 업데이트하거나 §e/p2p java§c 로 선택하세요.",
+  "instant-p2p-server.jre.not_needed": "§a이 Java(%s)는 패치됐거나 영향이 없어 조치가 필요 없습니다.",
+  "instant-p2p-server.jre.fixed": "§a문제 인증서를 이번 실행부터 막았습니다. §7(서버 프로세스 전체의 TLS 신뢰 목록에서 뺐으므로 다른 플러그인에도 적용됩니다. Java를 업데이트하면 필요 없어집니다)",
+  "instant-p2p-server.jre.fixed_always": "§a문제 인증서를 막았고, 다음 시작부터도 자동으로 적용합니다. §7(서버 프로세스 전체의 TLS 신뢰 목록에서 뺍니다. 되돌리려면 /p2p java forget 후 재시작)",
+  "instant-p2p-server.jre.fix_failed": "§c이 Java(%s)의 신뢰 목록을 바꾸지 못했습니다. Java를 업데이트해 주세요: %s",
+  "instant-p2p-server.jre.ignored": "§e위험을 알고 이번 실행 동안만 방 열기를 허용합니다. 시그널링 서버가 거부할 수 있습니다.",
+  "instant-p2p-server.jre.forgot": "§a저장된 자동 적용(fix always)을 지웠습니다. 다음 시작부터 적용되지 않습니다.",
+  "instant-p2p-server.jre.usage": "§e/p2p java [fix [always]|ignore|forget]",
+  "instant-p2p-server.jre.status_ok": "§aJava %s: CVE-2026-91403 영향 없음",
+  "instant-p2p-server.jre.status_mitigated": "§eJava %s: CVE-2026-91403 패치 안 됨 — 문제 인증서를 막아 둔 상태입니다 (Java 업데이트 권장)",
+  "instant-p2p-server.jre.status_warn": "§eJava %s: 보안 업데이트 상태를 확인할 수 없는 버전입니다. 가능하면 LTS 버전을 쓰세요.",
+  "instant-p2p-server.jre.status_vulnerable": "§cJava %s: CVE-2026-91403 패치 안 됨 (%s 보다 새 판 필요) — 방 열기를 막았습니다. Java 업데이트(%s) 또는 /p2p java fix | ignore",
+  "instant-p2p-server.jre.status_ignored": "§eJava %s: CVE-2026-91403 패치 안 됨 — 위험을 알고 이번 실행만 허용 중 (%s 보다 새 판 필요, %s)"
 }
