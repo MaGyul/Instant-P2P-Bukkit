@@ -238,6 +238,7 @@ Fabric 클라이언트 GameTest는 사람 입력을 막아 AuthMe 로그인이 �
   로그인 검사는 `P2PCore.ipBanDenial`(자체 목록 + 바닐라 `banned-ips.json`에 걸린 중계 합성 주소 연동), 플랫폼은 사유와 함께 거부(`instant-p2p-server.ban.denied`).
 - 표시: 번호(`#n`) + 주소. 중계는 합성 주소(원래 IP는 서버도 모르고 어디에도 안 남는다), 직결은 실제 IP(직결은 IP가 보일 것을 감안하고 접속한다고 합의). 해제는 `#번호|이름|IP`.
 - 일반 서버(Paper·Fabric): 직결 밴은 `P2PPlatform.runConsoleCommand`로 바닐라 `ban-ip`/`pardon-ip`에도 같이 올린다(바닐라 목록과 동기). Velocity는 해당 없음. 바닐라 `/ban-ip`를 직접 써도 중계 접속자 연동 차단은 그대로 동작.
+- Paper 1.21.11·실제 intermediary Fabric 1.21.11에서 확인: 직결 접속자 `/p2p ban-ip`는 바닐라 `ban-ip`에도 올라가(`banlist ips`에 같은 사유로 보임) 재접속이 거부되고, `/p2p pardon-ip #번호`가 바닐라 쪽도 같이 푼다. 중계 접속자는 바닐라 목록에 안 올라가고(`There are no bans`) 계정으로만 막힌다.
 - Velocity 4.2.1 + Fabric 백엔드에서 확인: 밴 → 즉시 퇴장 → 새 합성 주소로 재접속해도 사유와 함께 거부, 다른 계정 영향 없음, `pardon-ip #1` 뒤 재입장.
 
 ### 터널 닫기 (Velocity에서 확인)
