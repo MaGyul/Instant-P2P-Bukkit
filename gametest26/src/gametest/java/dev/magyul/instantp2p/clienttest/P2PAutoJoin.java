@@ -17,10 +17,14 @@ import net.minecraft.client.multiplayer.resolver.ServerAddress;
  * {@code -Dp2p.autojoin=true -Dp2p.code=<코드>}일 때만 동작한다.
  */
 public class P2PAutoJoin implements ClientModInitializer {
-    private enum State { WAIT_TITLE, WAIT_LOGIN, WAIT_SETUP, CONNECTING, WAIT_CONSENT, JOINED, DONE }
+    private enum State { WAIT_TITLE, WAIT_LOGIN, WAIT_SETUP, CONNECTING, WAIT_CONSENT, JOINED, CONTROL, DONE }
 
     private State state = State.WAIT_TITLE;
     private boolean askedConsent;
+    /** -Dp2p.control=true: 입장 뒤 끝내지 않고 run 폴더의 p2p-control.txt 명령(connect/disconnect/status/chat/quit)을 기다린다 — 한 번 로그인으로 여러 시나리오를 시험 */
+    private final boolean control = Boolean.getBoolean("p2p.control");
+    private boolean wasInWorld;
+    private String savedCode = "";
     /** -Dp2p.profile=franchise: 가맹점 서버 시험 — 서버 선택·약관 동의(사람이 직접)가 settings.json에 기록될 때까지 기다린다 */
     private final boolean franchise = "franchise".equalsIgnoreCase(System.getProperty("p2p.profile"));
     private long tick;
@@ -31,6 +35,7 @@ public class P2PAutoJoin implements ClientModInitializer {
         if (!Boolean.getBoolean("p2p.autojoin")) return;
         String code = System.getProperty("p2p.code", "").trim();
         int holdTicks = 20 * Integer.parseInt(System.getProperty("p2p.holdSeconds", "20"));
+        savedCode = code;
         ClientTickEvents.END_CLIENT_TICK.register(client -> onTick(client, code, holdTicks));
     }
 
@@ -72,15 +77,23 @@ public class P2PAutoJoin implements ClientModInitializer {
             case CONNECTING -> {
                 if (client.level != null && client.player != null) {
                     System.out.println("[P2PTest] 입장 성공 (" + (inState / 20) + "초)");
-                    client.player.connection.sendChat("gametest hello from p2p client");
-                    go(State.JOINED);
+                    if (control) {
+                        wasInWorld = true;
+                        go(State.CONTROL);
+                    } else {
+                        client.player.connection.sendChat("gametest hello from p2p client");
+                        go(State.JOINED);
+                    }
                 } else if (client.gui.screen() instanceof DisconnectedScreen) {
-                    if (!consentRecorded() && !askedConsent) {
+                    if (!control && !consentRecorded() && !askedConsent) {
                         // 공식 서버는 입장자 동의(Join Room 화면의 동의창)가 있어야 받는다 — 동의는 사람이 직접 한다
                         askedConsent = true;
                         client.gui.setScreen(new JoinMultiplayerScreen(new TitleScreen()));
                         System.out.println("[P2PTest] 입장 동의가 필요합니다 — 멀티플레이 화면에서 모드의 Join Room(방 참가) 화면에 들어가 동의창을 읽고 직접 선택하세요 (최대 15분). 동의가 기록되면 자동으로 다시 입장합니다");
                         go(State.WAIT_CONSENT);
+                    } else if (control) {
+                        System.out.println("[P2PTest] CONNECT_FAIL " + describe(client.gui.screen()));
+                        go(State.CONTROL);
                     } else {
                         finish(client, "FAIL 연결 끊김 화면: " + client.gui.screen().getTitle().getString());
                     }
@@ -104,6 +117,14 @@ public class P2PAutoJoin implements ClientModInitializer {
                     finish(client, "TIMEOUT 동의 대기 시간 초과");
                 }
             }
+            case CONTROL -> {
+                boolean inWorld = client.level != null;
+                if (wasInWorld && !inWorld && client.gui.screen() != null) {
+                    System.out.println("[P2PTest] LEFT_WORLD " + describe(client.gui.screen()));
+                }
+                wasInWorld = inWorld;
+                if (tick % 10 == 0) runControl(client);
+            }
             case JOINED -> {
                 if (client.level == null) {
                     finish(client, "FAIL 머무는 동안 연결이 끊겼다");
@@ -112,6 +133,58 @@ public class P2PAutoJoin implements ClientModInitializer {
                 }
             }
             case DONE -> { }
+        }
+    }
+
+    /** 화면 종류와, 화면이 가진 Component 필드(끊김 사유 등)의 글을 한 줄로. */
+    private static String describe(net.minecraft.client.gui.screens.Screen screen) {
+        StringBuilder sb = new StringBuilder(screen.getClass().getSimpleName());
+        for (Class<?> c = screen.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+            for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                try {
+                    if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+                    f.setAccessible(true);
+                    Object v = f.get(screen);
+                    if (v instanceof net.minecraft.network.chat.Component comp) {
+                        sb.append(" | ").append(comp.getString().replace((char) 10, ' '));
+                    } else if (v instanceof java.util.Optional<?> o && o.isPresent() && o.get() instanceof net.minecraft.network.chat.Component comp2) {
+                        sb.append(" | ").append(comp2.getString().replace((char) 10, ' '));
+                    }
+                } catch (ReflectiveOperationException | RuntimeException ignored) {
+                }
+            }
+        }
+        return sb.toString();
+    }
+
+    private void runControl(Minecraft client) {
+        java.nio.file.Path f = java.nio.file.Path.of("p2p-control.txt");
+        if (!java.nio.file.Files.isRegularFile(f)) return;
+        java.util.List<String> lines;
+        try {
+            lines = java.nio.file.Files.readAllLines(f);
+            java.nio.file.Files.delete(f);
+        } catch (java.io.IOException e) {
+            return;
+        }
+        for (String line : lines) {
+            String cmd = line.trim();
+            if (cmd.isEmpty()) continue;
+            System.out.println("[P2PTest] CMD " + cmd);
+            if (cmd.equals("connect")) {
+                connect(client, savedCode);
+                return; // 상태가 바뀌었다
+            } else if (cmd.equals("disconnect")) {
+                if (client.player != null) client.player.connection.getConnection().disconnect(net.minecraft.network.chat.Component.literal("test disconnect"));
+            } else if (cmd.equals("status")) {
+                System.out.println("[P2PTest] STATUS inWorld=" + (client.level != null) + " screen="
+                        + (client.gui.screen() == null ? "null" : client.gui.screen().getClass().getSimpleName()));
+            } else if (cmd.startsWith("chat ")) {
+                if (client.player != null) client.player.connection.sendChat(cmd.substring(5));
+            } else if (cmd.equals("quit")) {
+                finish(client, "PASS control end");
+                return;
+            }
         }
     }
 

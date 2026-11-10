@@ -5,6 +5,7 @@
   "name": "p2p client test",
   "environment": "client",
   "entrypoints": {
+    "preLaunch": ["dev.magyul.instantp2p.clienttest.P2PPreLaunch"],
     "client": ["dev.magyul.instantp2p.clienttest.P2PAutoJoin"],
     "fabric-client-gametest": ["dev.magyul.instantp2p.clienttest.P2PJoinTest"]
   },

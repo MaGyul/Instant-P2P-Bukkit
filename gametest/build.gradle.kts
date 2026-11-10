@@ -57,6 +57,8 @@ loom {
             if (code != null) vmArg("-Dp2p.code=$code")
             providers.gradleProperty("p2p.holdSeconds").orNull?.let { vmArg("-Dp2p.holdSeconds=$it") }
             providers.gradleProperty("p2p.profile").orNull?.let { vmArg("-Dp2p.profile=$it") }
+            providers.gradleProperty("p2p.control").orNull?.let { vmArg("-Dp2p.control=$it") }
+            providers.gradleProperty("p2p.relay").orNull?.let { vmArg("-Dp2p.relay=$it") }
         }
     }
 }
