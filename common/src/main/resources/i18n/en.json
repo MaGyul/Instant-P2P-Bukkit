@@ -239,5 +239,9 @@
   "instant-p2p-server.jre.status_mitigated": "§eJava %s: not patched for CVE-2026-91403 — the affected certificates are blocked (updating Java is recommended)",
   "instant-p2p-server.jre.status_warn": "§eJava %s: security-update status cannot be verified for this version. An LTS version is recommended.",
   "instant-p2p-server.jre.status_vulnerable": "§cJava %s: not patched for CVE-2026-91403 (needs newer than %s) — opening rooms is blocked. Update Java (%s) or /p2p java fix | ignore",
-  "instant-p2p-server.jre.status_ignored": "§eJava %s: not patched for CVE-2026-91403 — allowed for this run at your own risk (needs newer than %s, %s)"
+  "instant-p2p-server.jre.status_ignored": "§eJava %s: not patched for CVE-2026-91403 — allowed for this run at your own risk (needs newer than %s, %s)",
+  "instant-p2p-server.host.notice_unsigned": "§eRemoved from the public list: signed chat is not enforced. Set enforce-secure-profile=true in server.properties and restart.",
+  "instant-p2p-server.host.notice_title": "§eThe room title was filtered and the public room was turned off. Change the title setting and run /p2p reload.",
+  "instant-p2p-server.host.notice_quarantine": "§eThis room was temporarily hidden from the public list. It can still be joined by invite code.",
+  "instant-p2p-server.host.notice_nolog": "§eRemoved from the public list: the room-log heartbeat was not seen. Make sure you run the latest server edition."
 }

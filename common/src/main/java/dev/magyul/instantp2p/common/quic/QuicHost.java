@@ -101,6 +101,17 @@ public final class QuicHost {
     private volatile ServerConnector server;
     private volatile QuicIce ice;
     private volatile WebSocketClient lobby;
+    /** [1.3.0] 랑데부 연결이 지금 살아 있는지 — 방 기록·방 정보를 보낼 수 있는지 판단한다. */
+    private volatile boolean lobbyUp;
+    /** [1.3.0] 방 기록 해시 체인(하트비트 포함) — 끊긴 동안은 쌓아 둔다. */
+    private final HostLog hostLog = new HostLog(msg -> {
+        WebSocketClient ws = lobby;
+        if (ws == null || !lobbyUp) return false;
+        ws.send(msg);
+        return true;
+    });
+    private static final long HEARTBEAT_FIRST_MS = 5_000L;
+    private static final long HEARTBEAT_EVERY_MS = 30_000L;
     private volatile String fingerprint;
     private volatile List<QuicIce.Candidate> candidates = List.of();
     private volatile long backoffMs = INITIAL_BACKOFF_MS;
@@ -137,6 +148,10 @@ public final class QuicHost {
      * 표는 스트림 데이터 안에 실려 암호화된 뒤 나간다. 표 없는 연결은 첫 스트림에서 {@link #TICKET_WAIT_MS} 안에 연결째 끊긴다.
      */
     private final Map<String, Long> tickets = new ConcurrentHashMap<>();
+    /** [1.3.0] 표 → 그 표를 받은 조인자(sid) — 연결이 확인되면 서버에 "접속됨"을 알린다. */
+    private final Map<String, String> ticketSid = new ConcurrentHashMap<>();
+    /** [1.3.0] 표를 낸(확인된) 연결들 */
+    private final Set<Peer> authedPeers = ConcurrentHashMap.newKeySet();
     static final int TICKET_BYTES = 16;
     /** 표 유효 시간 — 조인자가 핸드셰이크를 몇 번 시도해도 넉넉하되 오래 두지는 않는다. */
     private static final long TICKET_TTL_MS = 120_000;
@@ -207,13 +222,78 @@ public final class QuicHost {
         server.start();
         LOG.info("[quic-host] listening room={} udpPort={} target={}:{}", roomId, agent.localPort(), targetHost, targetPort);
         worker.execute(this::openLobby);
+        // [1.3.0] 하트비트 — 공개 방은 이게 끊기면 목록에서 빠진다(notice: nolog)
+        watchdog.scheduleAtFixedRate(() -> {
+            try {
+                if (running.get()) hostLog.send(HostLog.heartbeat());
+            } catch (RuntimeException e) {
+                LOG.debug("[host] heartbeat 실패: {}", e.toString());
+            }
+        }, HEARTBEAT_FIRST_MS, HEARTBEAT_EVERY_MS, TimeUnit.MILLISECONDS);
+    }
+
+    // ── [1.3.0] 방 정보 / 방 기록 / 접속자 알림 (원본 1.5.1) ──────────────────────
+
+    /** 방 정보({@code room})와 접근 목록({@code acl})을 서버에 보낸다. 연결·재연결 때와 설정이 바뀔 때 부른다. */
+    public void pushRoomInfo() {
+        WebSocketClient ws = lobby;
+        if (ws == null || !lobbyUp) return;
+        ws.send("{\"room\":" + RoomInfo.json(core) + "}");
+        pushAcl();
+    }
+
+    public void pushAcl() {
+        WebSocketClient ws = lobby;
+        if (ws == null || !lobbyUp) return;
+        ws.send("{\"acl\":" + RoomInfo.aclJson(core) + "}");
+    }
+
+    /** 방 기록에 이벤트를 남긴다({@code {"k":"join",...}} 같은 JSON). */
+    public void hostEvent(String eventJson) {
+        if (running.get()) hostLog.send(eventJson);
+    }
+
+    private void sendPeer(String sid, boolean up, boolean relay) {
+        WebSocketClient ws = lobby;
+        if (ws != null && lobbyUp && sid != null) {
+            ws.send("{\"peer\":{\"sid\":\"" + sid + "\",\"up\":" + up + ",\"relay\":" + relay + "}}");
+        }
+    }
+
+    private void pushPeers() {
+        WebSocketClient ws = lobby;
+        if (ws == null || !lobbyUp || authedPeers.isEmpty()) return;
+        StringBuilder sb = new StringBuilder("{\"peers\":[");
+        for (Peer p : authedPeers) {
+            if (p.sid == null) continue;
+            if (sb.charAt(sb.length() - 1) != '[') sb.append(',');
+            sb.append("{\"sid\":\"").append(p.sid).append("\",\"relay\":").append(p.relayed).append('}');
+        }
+        ws.send(sb.append("]}").toString());
+    }
+
+    /** 서버 알림 — 공개 방 목록에서 빠지거나 숨겨지는 이유. */
+    private void onServerNotice(String notice) {
+        String key = switch (notice) {
+            case "unsigned" -> "instant-p2p-server.host.notice_unsigned";
+            case "title" -> "instant-p2p-server.host.notice_title";
+            case "quarantine" -> "instant-p2p-server.host.notice_quarantine";
+            case "nolog" -> "instant-p2p-server.host.notice_nolog";
+            default -> null;
+        };
+        LOG.warn("[host] 시그널링 서버 알림: {}", key != null ? notice : "(알 수 없음)");
+        if (key != null) core.platform().runSync(() -> core.platform().notifyAdmins(key));
     }
 
     public void close() {
         if (!running.compareAndSet(true, false)) return;
         long t0 = System.currentTimeMillis();
         WebSocketClient l = lobby;
-        if (l != null) l.close();
+        if (l != null) {
+            if (lobbyUp) l.send("{\"bye\":true}"); // 방이 닫힌다는 걸 먼저 알린다
+            lobbyUp = false;
+            l.close();
+        }
         for (Future<?> f : negotiations.values()) f.cancel(true);
         // 연결을 먼저 우리가 닫는다 — server.close()의 종료 대기가 기다릴 대상이 없게
         for (QuicConnection c : live) {
@@ -267,6 +347,10 @@ public final class QuicHost {
             @Override public void onConnected() {
                 connectedAt = System.currentTimeMillis(); // 백오프는 STABLE_MS 이상 유지된 뒤에만 되돌린다
                 consecutiveFailures = 0;
+                lobbyUp = true;
+                hostLog.flush();
+                pushRoomInfo();
+                pushPeers();
                 LOG.info("[host] rendezvous joined: room={}", roomId);
                 if (signalingDown) {
                     signalingDown = false;
@@ -282,12 +366,18 @@ public final class QuicHost {
                     core.platform().runSync(() -> core.platform().notifyAdmins("instant-p2p-server.host.rejected", why));
                     return;
                 }
+                String notice = VillasMsg.field(json, "notice");
+                if (notice != null) {
+                    onServerNotice(notice);
+                    return;
+                }
                 handleRendezvous(json);
             }
             @Override protected int readIdleTimeoutMs() {
                 return LIVENESS_TIMEOUT_MS;
             }
             @Override public void onDisconnected() {
+                lobbyUp = false;
                 scheduleReconnect();
             }
         };
@@ -493,7 +583,7 @@ public final class QuicHost {
         }
         try {
             // 지문 뒤에 접속 표를 붙인다 — 이 조인자에게만 간다(서버가 sid로 라우팅)
-            send(sid, VillasMsg.description(MSG_ANSWER, fingerprint + " " + newTicket()));
+            send(sid, VillasMsg.description(MSG_ANSWER, fingerprint + " " + newTicket(sid)));
             for (QuicIce.Candidate c : mine) {
                 send(sid, VillasMsg.candidate(c.line(), "0"));
             }
@@ -583,6 +673,8 @@ public final class QuicHost {
         final String key;
         /** [1.3.0] 연결 수 제한·차단에 쓰는 출발지 식별자(IPv6는 앞 64비트, 중계는 ip:port). 못 잡으면 null. */
         String source;
+        /** [1.3.0] 이 연결을 만든 랑데부 조인자(sid) — 접속 표가 확인되면 정해진다. */
+        volatile String sid;
         /** [1.3.0] 접속자 → 서버 전송량 제한(연결 전체 공유). */
         final UploadThrottle upload = new UploadThrottle();
         volatile boolean relayed;
@@ -596,17 +688,20 @@ public final class QuicHost {
 
         void markRelayed() {
             relayed = true;
+            QuicHost.this.sendPeer(sid, true, true);
             for (TunnelRegistry.Tunnel t : tunnels) QuicHost.this.tunnels.setRelay(t, true);
         }
     }
 
-    private String newTicket() {
+    private String newTicket(String sid) {
         long now = System.currentTimeMillis();
         tickets.values().removeIf(exp -> exp < now); // 만료된 표를 치운다
+        ticketSid.keySet().removeIf(k -> !tickets.containsKey(k));
         byte[] b = new byte[TICKET_BYTES];
         RNG.nextBytes(b);
         String hex = HexFormat.of().formatHex(b);
         tickets.put(hex, now + TICKET_TTL_MS);
+        ticketSid.put(hex, sid);
         return hex;
     }
 
@@ -648,6 +743,11 @@ public final class QuicHost {
                 synchronized (authed) { // 첫 스트림 둘이 동시에 와도 한 번만 소진한다
                     String cur = authed.get();
                     ok = cur != null ? cur.equals(hex) : takeTicket(hex) && authed.compareAndSet(null, hex);
+                    if (ok && cur == null) { // 이 연결의 첫 확인 — 서버에 접속됨을 알린다
+                        peer.sid = ticketSid.remove(hex);
+                        authedPeers.add(peer);
+                        sendPeer(peer.sid, true, peer.relayed);
+                    }
                 }
             }
             if (!ok) {
@@ -766,8 +866,11 @@ public final class QuicHost {
             live.add(conn);
             final boolean srcHeldFinal = srcHeld;
             AtomicBoolean srcReleased = new AtomicBoolean(false);
+            AtomicReference<Peer> peerRef = new AtomicReference<>();
             conn.setConnectionListener(event -> {
                 live.remove(conn);
+                Peer ended = peerRef.get();
+                if (ended != null && authedPeers.remove(ended)) sendPeer(ended.sid, false, ended.relayed);
                 if (srcHeldFinal && srcReleased.compareAndSet(false, true)) release(liveBySource, source);
             });
 
@@ -778,6 +881,7 @@ public final class QuicHost {
             boolean relayed = ip != null && (isTurnServer(ip) || (agent != null && agent.sendsViaRelayTo(remote)));
             Peer peer = new Peer(key, relayed);
             peer.source = source;
+            peerRef.set(peer);
             if (key == null) {
                 LOG.warn("[host] 상대 주소를 못 잡았다 — 이 연결엔 IP 복원이 적용되지 않는다");
             } else if (!relayed) {

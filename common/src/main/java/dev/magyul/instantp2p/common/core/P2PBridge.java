@@ -40,6 +40,23 @@ public class P2PBridge {
         h.start();
     }
 
+    /** [1.3.0] 방 기록에 이벤트를 남긴다(열려 있을 때만). */
+    public void hostEvent(String eventJson) {
+        QuicHost h = host;
+        if (h != null) h.hostEvent(eventJson);
+    }
+
+    /** [1.3.0] 방 정보(공개 여부·제목·정원·옵션)와 밴 목록을 시그널링 서버에 다시 보낸다. */
+    public void pushRoomInfo() {
+        QuicHost h = host;
+        if (h != null) h.pushRoomInfo();
+    }
+
+    public void pushAcl() {
+        QuicHost h = host;
+        if (h != null) h.pushAcl();
+    }
+
     public void stopHost() {
         QuicHost h = host;
         if (h != null) {
@@ -64,6 +81,7 @@ public class P2PBridge {
     /** 밴 목록이 바뀌었을 때 — 지금 공개된 방이 있으면 즉시 새 밴 목록을 실어 재공지한다. */
     public void republishPublicRoomIfActive() {
         publicRoomAnnouncer.republishNow();
+        pushAcl(); // [1.3.0] 방장 연결의 접근 목록(밴)도 갱신
     }
 
     /** 공개 방 인원(현재/최대)이 바뀔 때마다 호출 — 재접속 없이 메시지만 보낸다. */

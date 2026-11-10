@@ -199,6 +199,7 @@ public final class P2PCore {
 
     /** 서버 스레드. P2P 최대 인원이 바뀌었다 — 모드에 보이는 정원을 다시 알린다. */
     public void onMaxPlayersChanged() {
+        bridge.pushRoomInfo();
         broadcastRoomState();
         bridge.updatePublicRoomPlayerCount(onlinePlayers.size(), maxPlayers());
     }
@@ -209,10 +210,12 @@ public final class P2PCore {
         onlinePlayers.add(player);
         broadcastRoomState();
         bridge.updatePublicRoomPlayerCount(onlinePlayers.size(), maxPlayers());
+        bridge.hostEvent(roomLogEvent("join", player));
     }
 
     /** 서버 스레드. 퇴장 — 이 시점엔 플랫폼 온라인 목록에 아직 남아 있으므로 방 상태는 다음 틱에 보낸다. */
     public void onQuit(UUID player) {
+        bridge.hostEvent(roomLogEvent("leave", player)); // 아직 온라인 목록에 있어 이름을 알 수 있다
         tunnels.unbindPlayer(player);
         expel.onDisconnect(player);
         onlinePlayers.remove(player);
@@ -220,6 +223,16 @@ public final class P2PCore {
             broadcastRoomState();
             bridge.updatePublicRoomPlayerCount(onlinePlayers.size(), maxPlayers());
         });
+    }
+
+    /** [1.3.0] 방 기록 이벤트 {@code {"k":"join|leave","by":uuid,"nick":이름}} (닉네임은 32자까지). */
+    private String roomLogEvent(String kind, UUID player) {
+        String name = platform.playerName(player);
+        com.google.gson.JsonObject o = new com.google.gson.JsonObject();
+        o.addProperty("k", kind);
+        o.addProperty("by", player.toString());
+        o.addProperty("nick", name == null ? "" : name.length() > 32 ? name.substring(0, 32) : name);
+        return o.toString();
     }
 
     /** 서버 스레드. instant-p2p:moderation 수신. */

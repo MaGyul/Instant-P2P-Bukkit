@@ -263,6 +263,7 @@ public final class HostController {
     public void publishPublicRoom() {
         P2PSettings settings = core.settings();
         String code = inviteCode();
+        if (state == RoomState.OPEN) core.bridge().pushRoomInfo(); // [1.3.0] 공개 여부·제목·정원이 바뀌었을 수 있다
         if (state != RoomState.OPEN || !publicRoomActive() || code == null) return;
         if (core.platform().minecraftVersion() == null) return; // 버전을 알아야 목록에서 호환으로 보인다
         String title = settings.title().isEmpty() ? core.platform().motd() : settings.title();
