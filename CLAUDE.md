@@ -247,8 +247,10 @@ Fabric 클라이언트 GameTest는 사람 입력을 막아 AuthMe 로그인이 �
 - 접속자가 먼저 떠나면 서버 쪽 소켓을 바로 `close()`하지 않고 쓰기만 닫은 뒤(FIN) 서버가 보내는 것을 읽어 버리며 `CLIENT_LEFT_GRACE_MS`(400ms) 기다린다. 서버가 그 안에 닫으면(EOF) 깨끗하게 끝나고,
   안 닫으면 `SO_LINGER 0`으로 RST를 보내 끊는다. 바로 닫으면 읽지 않은 데이터 때문에 RST가 나가 Velocity가 `exception encountered in ClientPlaySessionHandler: Connection reset` ERROR를 찍는다(Paper·Fabric·Spigot은 조용히 "Disconnected").
   **Velocity 3.x는 FIN을 받아도 닫지 않는다**(반닫기 허용 — FIN만 보내고 두면 다음 쓰기 실패까지 접속이 남아 같은 계정이 "이미 연결됨"으로 거부된다). 그래서 유예 뒤 RST로 끊는다.
-- 알려진 한계(3.5.1·4.2.1 공통, 시험 도구가 클라이언트를 갑자기 끊는 경우): 가끔 접속자가 나갔는데도 프록시가 `kicked from server lobby: disconnect.timeout`까지 약 30초 세션을 들고 있다. 서버 쪽 터널 소켓이 닫히지 않은 경우라
-  QUIC 연결이 끊김을 알리는 패킷이 중계 경로에서 유실돼 kwik 유휴 시간(30초) 뒤에야 끝나는 것으로 보인다(확정 못 함). 중계 접속자에서 더 잦다. 필요하면 유휴 시간을 줄이거나 접속자 쪽 종료 신호를 재전송하는 방안을 검토.
+- 알려진 한계 — **조사 결과(원인은 Velocity 쪽)**: Velocity에서 접속자가 나가도 프록시가 세션을 약 15~30초 들고 있다가 `kicked from server lobby: disconnect.timeout` 또는 `Connection reset`으로 정리하는 경우가 있다
+  (3.5.1·4.2.1 모두, 직결·중계 모두 가능). 서버 쪽 추적 로그로 확인한 사실: 호스트는 접속자 퇴장을 **같은 초에** 알고(스트림 종료 → 터널 소켓 FIN/닫기) 정상 처리했다 — 깨끗하게 끝난 회차와 오래 남은 회차의 호스트 로그가 동일했다.
+  따라서 QUIC 종료 신호 유실이 아니고, Velocity가 닫힌 클라이언트 소켓을 바로 알아차리지 못하는 것이다(다음 keepalive 쓰기 때 RST를 만나서야 정리 — 간격이 약 15초). 우리가 소켓을 더 일찍·세게 닫아도 바뀌지 않는다.
+  Paper·Fabric·Spigot은 같은 상황에서 항상 즉시 정리됐다. **완화**: velocity.toml의 `kick-existing-players = true`로 두면 같은 계정의 재접속이 남은 세션을 밀어내고 들어온다(README 안내).
 
 ### 서버 로직
 - expel은 영구 밴이 아니라 **차단자 기준**: holders에 기록, 차단자가 나가면 해제. 클라이언트가 접속 때마다 목록을 재전송하므로 **오프라인 대상도 기록**해야 한다.

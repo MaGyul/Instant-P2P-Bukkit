@@ -176,3 +176,8 @@ QUIC 연결의 실제 UDP 출발 주소를 씁니다.
 - [hkdf](https://github.com/patrickfav/hkdf) (Apache-2.0), [siphash](https://github.com/whitfin/siphash-java) (MIT)
 - 함께 넣은 라이브러리의 라이선스 전문과 고지는 [`licenses/`](licenses/)와 jar 안 `META-INF/licenses/`에 있습니다.
   kwik·agent15는 LGPL-3.0이라, 이 저장소를 다른 버전으로 다시 빌드해 바꿔 넣을 수 있습니다(`gradle.properties`의 `kwikVersion`).
+
+### Velocity 사용 시 팁
+
+접속자가 나가도 Velocity가 닫힌 연결을 알아차리는 데 15~30초 걸리는 경우가 있어, 그 사이 같은 계정이 다시 들어오면 "이미 이 프록시에 연결되어 있습니다"로 거부될 수 있습니다.
+`velocity.toml`의 `kick-existing-players = true`로 두면 재접속이 남은 세션을 밀어내고 바로 들어옵니다.
