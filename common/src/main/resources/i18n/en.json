@@ -283,7 +283,7 @@
   "multiplayer.disconnect.ip_banned": "Your IP address is banned from this server.",
   "instant-p2p-server.ban.usage": "§e/p2p ban-ip <player|IP> [reason]",
   "instant-p2p-server.ban.pardon_usage": "§e/p2p pardon-ip <#id|player|IP>  (ids: /p2p ban-list)",
-  "instant-p2p-server.ban.done": "§aBanned: %s %s (%s, %s). §7Pardon it by id with /p2p pardon-ip. A direct guest's real IP is never shown.",
+  "instant-p2p-server.ban.done": "§aBanned: %s %s (%s, %s). §7Pardon it by id with /p2p pardon-ip.",
   "instant-p2p-server.ban.not_guest": "§cNot a connected P2P guest: %s §7(names only work for guests that joined through the tunnel; you can also give an IP)",
   "instant-p2p-server.ban.denied": "§cYou are banned from this server: %s",
   "instant-p2p-server.ban.pardoned": "§aPardoned %s ban(s).",

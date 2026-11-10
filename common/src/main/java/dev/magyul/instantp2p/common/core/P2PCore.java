@@ -256,9 +256,9 @@ public final class P2PCore {
         }
     }
 
-    /** 화면에 보일 주소 — 중계 접속자의 합성 주소는 보여도 되지만(원래 IP가 아니다), 직결 접속자의 실제 IP는 가린다. */
+    /** 화면에 보일 주소 — 중계 접속자는 합성 주소(원래 IP는 서버도 모른다), 직결 접속자는 실제 IP(직결은 IP가 보일 것을 감안하고 접속한다). */
     private static String shownAddr(P2PBanList.Entry e) {
-        return e.relay() && e.addr() != null ? e.addr() : "***";
+        return e.addr() != null ? e.addr() : "-";
     }
 
     private static String kindLabel(boolean relay) {

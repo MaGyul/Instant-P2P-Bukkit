@@ -22,7 +22,7 @@ import org.slf4j.LoggerFactory;
  * <p>
  * 항목: 직결 접속자는 <b>주소</b>(실제 IPv4, 바닐라 {@code banned-ips.json}과 같은 정보)로 막고, 중계 강제 접속자는
  * <b>계정 UUID</b>로 막는다 — 중계 접속자의 원래 IP는 서버도 모르고 이 파일에도 남지 않는다(합성 주소와 UUID뿐).
- * 화면(채팅·콘솔)에는 주소를 보이지 않고 번호({@code #n})로 다룬다 — 방송 화면에 IP가 비치지 않게.
+ * 화면에는 번호({@code #n})와 주소를 보인다 — 중계 접속자는 합성 주소(원래 IP는 어디에도 없다), 직결 접속자는 IP가 보일 것을 감안하고 접속한다.
  */
 final class P2PBanList {
     private static final Logger LOG = LoggerFactory.getLogger("Instant-P2P");
