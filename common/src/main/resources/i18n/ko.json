@@ -279,5 +279,6 @@
   "instant-p2p-server.consent.status_no": "§e방장 동의: 없음 (/p2p consent)",
   "instant-p2p-server.consent.title": "§l방장 동의",
   "instant-p2p-server.public.paused": "§e공개 방 목록을 쓸 수 없습니다: %s §7(%s분마다 다시 확인합니다. 초대 코드 방은 그대로 열려 있습니다)",
-  "instant-p2p-server.public.refused": "§e서버가 공개 방을 거부했습니다: %s §7(원인을 해결한 뒤 /p2p close → /p2p open)"
+  "instant-p2p-server.public.refused": "§e서버가 공개 방을 거부했습니다: %s §7(원인을 해결한 뒤 /p2p close → /p2p open)",
+  "multiplayer.disconnect.ip_banned": "당신의 IP 주소가 이 서버에서 차단되었습니다."
 }

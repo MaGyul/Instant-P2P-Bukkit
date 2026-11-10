@@ -50,6 +50,8 @@ public final class P2PCore {
     private final ExpelManager expel;
     private final P2PBridge bridge;
     private final HostAccount account;
+    private final RelayLinks relayLinks;
+    private final BannedIps bannedIps = new BannedIps(java.nio.file.Path.of("banned-ips.json"));
     /** 방장 동의 기록(공개 방 / 공식 서버) */
     private final dev.magyul.instantp2p.common.signaling.Consent consent;
     private final HostController host;
@@ -65,6 +67,7 @@ public final class P2PCore {
         this.platform = platform;
         this.expel = new ExpelManager(platform, this::broadcastRoomState);
         this.bridge = new P2PBridge(this);
+        this.relayLinks = new RelayLinks(platform.dataFolder().resolve("relay-links.json"));
         this.account = new HostAccount(platform.dataFolder(), platform.settings().serverUuid().toString());
         this.consent = new dev.magyul.instantp2p.common.signaling.Consent(platform.dataFolder());
         this.host = new HostController(this);
@@ -140,6 +143,27 @@ public final class P2PCore {
     public boolean onPreLogin(UUID player, InetAddress address) {
         noteTunnelLogin(player, address);
         return onPreLogin(player);
+    }
+
+    /**
+     * 중계 강제 접속자의 계정이 전에 쓴 합성 주소 중 IP 밴된 것이 있으면 true — 플랫폼이 IP 밴 거부
+     * ({@code multiplayer.disconnect.ip_banned})로 입장을 막는다. 중계 강제 접속자의 서버 쪽 주소는 접속할 때마다 바뀌어
+     * {@code /ban-ip}만으로는 재접속이 안 막히기 때문이다(원본은 중계 접속자 전원을 TURN IP 하나로 취급해 전원이 막힌다).
+     * 직결 접속자는 건드리지 않는다(바닐라 IP 밴이 그대로 동작).
+     */
+    public boolean isLinkedIpBanned(UUID player, InetAddress address) {
+        if (player == null || address == null || !tunnels.isRelayAddress(address)) return false;
+        String current = address.getHostAddress();
+        relayLinks.remember(player, current);
+        java.util.Set<String> banned = bannedIps.ips();
+        if (banned.isEmpty()) return false;
+        for (String old : relayLinks.addresses(player)) {
+            if (!old.equals(current) && banned.contains(old)) {
+                LOG.info("[host] 중계 접속자 {}: 전에 쓴 합성 주소가 IP 밴 목록에 있어 입장 거부", player);
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 테스트용으로 분리 (역할 갱신 네트워크 호출 없이) */

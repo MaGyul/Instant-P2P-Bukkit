@@ -94,6 +94,8 @@ public final class FabricImpl implements FabricEntry.Impl {
         PlayerLimitBypass.setDenial((address, profile) -> {
             UUID id = Profiles.id(profile);
             if (id == null || !(address instanceof InetSocketAddress isa)) return null;
+            // 중계 강제 접속자: 전에 쓴 합성 주소가 IP 밴 목록에 있으면 거부 (접속마다 주소가 바뀌어 /ban-ip만으로는 안 막힌다)
+            if (core.isLinkedIpBanned(id, isa.getAddress())) return FabricText.translatable("multiplayer.disconnect.ip_banned");
             return core.isP2PFull(id, Profiles.name(profile), isa.getAddress())
                     ? FabricText.translatable(P2PCore.SERVER_FULL) : null;
         });

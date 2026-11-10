@@ -147,6 +147,13 @@ public class TunnelRegistry {
         return byLocal.values().stream().anyMatch(t -> t.peerAddress.equals(addr));
     }
 
+    /** 이 주소가 중계 강제 접속자의 합성 주소인지(원본 주소가 {@code relay-…}로 시작하는 터널). */
+    public boolean isRelayAddress(InetAddress addr) {
+        if (addr == null) return false;
+        return byLocal.values().stream().anyMatch(t -> t.peerAddress.equals(addr)
+                && t.realIp != null && t.realIp.startsWith("relay-"));
+    }
+
     public int size() {
         return byLocal.size();
     }
