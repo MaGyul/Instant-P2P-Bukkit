@@ -29,6 +29,7 @@ import java.net.SocketException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -463,6 +464,54 @@ public final class QuicHost {
         return ip;
     }
 
+    // ── [1.3.0] 출발지별 연결 제한 (원본 1.5.1) ──────────────────────────────
+
+    /** 출발지 하나가 동시에 가질 수 있는 연결 / 아직 표를 못 낸 연결 */
+    private static final int MAX_LIVE_PER_SOURCE = 6;
+    private static final int MAX_UNAUTH_PER_SOURCE = 3;
+    private static final long DENY_MS = 600_000L;
+    private final Map<String, Integer> liveBySource = new HashMap<>();
+    private final Map<String, Integer> unauthBySource = new HashMap<>();
+    private final Map<String, Long> deniedUntil = new ConcurrentHashMap<>();
+
+    /** IPv4는 주소, IPv6는 앞 64비트(한 가입자가 주소를 바꿔 가며 우회하지 못하게), 중계는 ip:port. */
+    private String sourceKey(InetSocketAddress remote) {
+        if (remote == null || remote.getAddress() == null) return null;
+        String ip = remote.getAddress().getHostAddress();
+        if (isTurnServer(ip)) return "relay-" + ip + ":" + remote.getPort();
+        byte[] a = remote.getAddress().getAddress();
+        if (a.length == 16) return "ip6-" + HexFormat.of().formatHex(a, 0, 8);
+        return ip;
+    }
+
+    private boolean isDenied(String source) {
+        Long until = deniedUntil.get(source);
+        if (until == null) return false;
+        if (until < System.currentTimeMillis()) {
+            deniedUntil.remove(source);
+            return false;
+        }
+        return true;
+    }
+
+    private void deny(String source) {
+        if (source == null) return;
+        if (deniedUntil.size() > 1024) deniedUntil.values().removeIf(t -> t < System.currentTimeMillis());
+        if (deniedUntil.size() <= 1024) deniedUntil.put(source, System.currentTimeMillis() + DENY_MS);
+    }
+
+    /** 카운터를 하나 올린다. 상한이면 올리지 않고 false. */
+    private static synchronized boolean acquire(Map<String, Integer> m, String source, int max) {
+        int n = m.getOrDefault(source, 0);
+        if (n >= max) return false;
+        m.put(source, n + 1);
+        return true;
+    }
+
+    private static synchronized void release(Map<String, Integer> m, String source) {
+        m.computeIfPresent(source, (k, n) -> n <= 1 ? null : n - 1);
+    }
+
     private boolean isTurnServer(String ip) {
         InetSocketAddress turn = TurnAllocation.parseUrl(P2PConfig.turnUrl());
         return turn != null && turn.getAddress() != null && turn.getAddress().getHostAddress().equals(ip);
@@ -471,6 +520,10 @@ public final class QuicHost {
     /** 연결 하나의 정보 — 스트림(=MC 접속)마다 터널을 등록할 때 쓴다 */
     private final class Peer {
         final String key;
+        /** [1.3.0] 연결 수 제한·차단에 쓰는 출발지 식별자(IPv6는 앞 64비트, 중계는 ip:port). 못 잡으면 null. */
+        String source;
+        /** [1.3.0] 접속자 → 서버 전송량 제한(연결 전체 공유). */
+        final UploadThrottle upload = new UploadThrottle();
         volatile boolean relayed;
         /** 이 연결의 스트림들이 등록한 터널 — 경로가 중계로 바뀌면 같이 고친다 */
         final Set<TunnelRegistry.Tunnel> tunnels = ConcurrentHashMap.newKeySet();
@@ -508,12 +561,23 @@ public final class QuicHost {
      *
      * @return 통과하면 true — 이때 스트림 입력은 표 16바이트를 소비한 상태다
      */
-    private boolean admit(QuicStream stream, QuicConnection conn, AtomicReference<String> authed) {
+    private boolean admit(QuicStream stream, QuicConnection conn, Peer peer, AtomicReference<String> authed) {
         final boolean first = authed.get() == null;
-        if (first && !unauth.tryAcquire()) {
-            conn.close(); // 표를 못 낸 연결이 이미 너무 많다
-            return false;
+        final String src = peer.source;
+        boolean srcHeld = false;
+        if (first) {
+            // [1.3.0] 출발지당 미확인 연결 3개 + 전체 32개
+            if (src != null && !(srcHeld = acquire(unauthBySource, src, MAX_UNAUTH_PER_SOURCE))) {
+                conn.close();
+                return false;
+            }
+            if (!unauth.tryAcquire()) {
+                if (srcHeld) release(unauthBySource, src);
+                conn.close(); // 표를 못 낸 연결이 이미 너무 많다
+                return false;
+            }
         }
+        final boolean srcHeldFinal = srcHeld;
         ScheduledFuture<?> kill = first ? watchdog.schedule(() -> conn.close(), TICKET_WAIT_MS, TimeUnit.MILLISECONDS) : null;
         try {
             byte[] t = stream.getInputStream().readNBytes(TICKET_BYTES);
@@ -540,12 +604,13 @@ public final class QuicHost {
         } finally {
             if (kill != null) kill.cancel(false);
             if (first) unauth.release();
+            if (srcHeldFinal) release(unauthBySource, src);
         }
     }
 
     private void bridge(QuicStream stream, Peer peer, QuicConnection conn, AtomicReference<String> authed) {
         // 표 확인이 MC 서버로 다이얼·터널 등록보다 먼저 — 표 없는 연결은 서버에 닿지 않는다
-        if (!admit(stream, conn, authed)) return;
+        if (!admit(stream, conn, peer, authed)) return;
         Socket tcp = new Socket();
         TunnelRegistry.Tunnel tunnel = null;
         try {
@@ -576,22 +641,38 @@ public final class QuicHost {
             if (registered != null) peer.tunnels.remove(registered);
         };
         try {
-            pump("quic-host-up", tcp.getInputStream(), stream.getOutputStream(), closeBoth);
-            pump("quic-host-down", stream.getInputStream(), tcp.getOutputStream(), closeBoth);
+            pump("quic-host-up", tcp.getInputStream(), stream.getOutputStream(), closeBoth, null, null);
+            // 접속자 → 서버 방향만 전송량을 제한한다. 계속 한도를 넘기면 연결을 끊고 출발지를 10분 막는다.
+            pump("quic-host-down", stream.getInputStream(), tcp.getOutputStream(), closeBoth, peer.upload, () -> {
+                LOG.warn("[quic-host] 접속자 업로드가 한도를 계속 넘어 연결을 끊고 출발지를 {}분 막는다", DENY_MS / 60_000);
+                deny(peer.source);
+                conn.close();
+            });
         } catch (IOException e) {
             closeBoth.run();
         }
     }
 
-    private static void pump(String name, InputStream in, OutputStream out, Runnable onEnd) {
+    private static void pump(String name, InputStream in, OutputStream out, Runnable onEnd,
+                             UploadThrottle throttle, Runnable onAbuse) {
         Thread t = new Thread(() -> {
             byte[] buf = new byte[PIPE_BUF];
             try {
                 int n;
                 while ((n = in.read(buf)) > 0) {
+                    if (throttle != null) {
+                        long wait = throttle.take(n, System.currentTimeMillis());
+                        if (throttle.abusive()) {
+                            onAbuse.run();
+                            return;
+                        }
+                        if (wait > 0) Thread.sleep(wait);
+                    }
                     out.write(buf, 0, n);
                     out.flush();
                 }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             } catch (IOException e) {
                 LOG.debug("[host] {} ended: {}", name, e.getMessage());
             } finally {
@@ -611,16 +692,31 @@ public final class QuicHost {
 
         @Override
         public ApplicationProtocolConnection createConnection(String protocol, QuicConnection conn) {
-            live.add(conn);
-            conn.setConnectionListener(event -> live.remove(conn));
-
             InetSocketAddress remote = conn instanceof ServerConnection sc ? sc.getInitialRemoteAddress() : null;
+            String source = sourceKey(remote);
+            // [1.3.0] 막힌 출발지이거나 동시 연결이 상한이면 받지 않는다(스트림도 처리하지 않는다)
+            boolean srcHeld = false;
+            if (source != null && (isDenied(source) || !(srcHeld = acquire(liveBySource, source, MAX_LIVE_PER_SOURCE)))) {
+                conn.close();
+                return new ApplicationProtocolConnection() {
+                    @Override public void acceptPeerInitiatedStream(QuicStream stream) {}
+                };
+            }
+            live.add(conn);
+            final boolean srcHeldFinal = srcHeld;
+            AtomicBoolean srcReleased = new AtomicBoolean(false);
+            conn.setConnectionListener(event -> {
+                live.remove(conn);
+                if (srcHeldFinal && srcReleased.compareAndSet(false, true)) release(liveBySource, source);
+            });
+
             String key = peerKey(remote);
             QuicIce agent = ice;
             String ip = remote != null && remote.getAddress() != null ? remote.getAddress().getHostAddress() : null;
             // 양쪽 중 하나라도 relay면 중계 — 출처가 TURN 서버이거나, 우리가 그 상대에게 allocation으로 보내고 있거나
             boolean relayed = ip != null && (isTurnServer(ip) || (agent != null && agent.sendsViaRelayTo(remote)));
             Peer peer = new Peer(key, relayed);
+            peer.source = source;
             if (key == null) {
                 LOG.warn("[host] 상대 주소를 못 잡았다 — 이 연결엔 IP 복원이 적용되지 않는다");
             } else if (!relayed) {
