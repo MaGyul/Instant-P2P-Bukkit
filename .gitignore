@@ -34,3 +34,6 @@ gametest26/libs/
 gametest26/run-client/
 gametest26/build/
 gametest26/.gradle/
+fabricserver/run/
+fabricserver/build/
+fabricserver/.gradle/
