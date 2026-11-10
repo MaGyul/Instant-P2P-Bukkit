@@ -67,6 +67,11 @@ public final class QuicHost {
     static final String MSG_ANSWER = "quic-answer";
     /** 중계 강제인데 중계 계정이 없다 — 알릴 후보가 없으니 조인자가 30초 기다리지 않게 바로 알린다. */
     static final String MSG_NO_RELAY = "quic-no-relay";
+    /** [1.3.0] 협상 자리가 없다 — 조인자가 "방장이 바쁨"을 바로 안내하게 한다(원본 1.5.1). */
+    static final String MSG_BUSY = "quic-busy";
+    private static final long NEGOTIATION_WAIT_MS = 4_000L;
+    /** 랑데부 연결이 이만큼은 유지돼야 백오프를 처음으로 되돌린다 — 붙자마자 끊기는 루프에서 재접속이 몰리지 않게. */
+    private static final long STABLE_MS = 20_000L;
     private static final int DIAL_TIMEOUT_MS = 5_000;
     /** 조인자의 2단계 시도(직결 2초 + 중계 30초)보다 길어야 방장이 먼저 포기하지 않는다. */
     private static final long PUNCH_MS = 35_000L;
@@ -95,6 +100,7 @@ public final class QuicHost {
     private volatile String fingerprint;
     private volatile List<QuicIce.Candidate> candidates = List.of();
     private volatile long backoffMs = INITIAL_BACKOFF_MS;
+    private volatile long connectedAt;
     /**
      * 시그널링 서버가 방 열기를 거부한 이유 — 다시 붙어도 같으므로 재접속을 멈춘다(가맹점 F3.x와 같게). null이면 정상.
      * 가맹점 서버가 보내는 오류 코드: 기기·계정 차단, 기기 확인값 없음, 정품 인증 필요, 방 개수 초과.
@@ -172,6 +178,12 @@ public final class QuicHost {
         // 서버판은 방장 쪽 중계 강제가 없다(원본 개발자 요청 — 중계 서버 부담). 중계는 직결이 안 될 때와 조인자가 강제할 때만 쓴다.
         QuicIce agent = openIce(core.settings().udpPort());
         ice = agent;
+        // [1.3.0] 모르는 주소 패킷 폭주 방어 — 켜지고 꺼질 때 관리자에게 알린다
+        agent.onFlood = on -> {
+            LOG.warn("[quic-host] 패킷 폭주 방어 {}", on ? "시작" : "해제");
+            core.platform().runSync(() -> core.platform().notifyAdmins(
+                    on ? "instant-p2p-server.host.flood_on" : "instant-p2p-server.host.flood_off"));
+        };
         // TURN 계정은 방장 계정 인증으로 받는다. 못 받으면 중계 없이(직결만) 간다.
         String[] turn = core.account().turnCredentials();
         if (turn != null) {
@@ -248,7 +260,7 @@ public final class QuicHost {
                 + HardwareId.query(); // 가맹점 서버일 때만 붙는다(가맹점 수정판과 같게)
         WebSocketClient ws = new WebSocketClient(url) {
             @Override public void onConnected() {
-                backoffMs = INITIAL_BACKOFF_MS;
+                connectedAt = System.currentTimeMillis(); // 백오프는 STABLE_MS 이상 유지된 뒤에만 되돌린다
                 consecutiveFailures = 0;
                 LOG.info("[host] rendezvous joined: room={}", roomId);
                 if (signalingDown) {
@@ -292,6 +304,9 @@ public final class QuicHost {
      */
     private void scheduleReconnect() {
         if (!running.get() || fatalError != null) return;
+        long up = connectedAt;
+        if (up != 0 && System.currentTimeMillis() - up >= STABLE_MS) backoffMs = INITIAL_BACKOFF_MS;
+        connectedAt = 0;
         consecutiveFailures++;
         if (!signalingDown && consecutiveFailures >= 2) {
             signalingDown = true;
@@ -356,8 +371,10 @@ public final class QuicHost {
         boolean clientRelayForced = "true".equals(VillasMsg.field(join, "relay"));
         // IP는 로그에 남기지 않는다 — 방장이 로그를 공유하면 조인자 IP가 박제된다
         LOG.info("[host] join detected: sid={} clientRelayForced={}", sid, clientRelayForced);
-        if (!negotiating.tryAcquire()) {
-            LOG.warn("[host] 동시 협상이 너무 많다 — sid={} 는 건너뛴다 (조인자가 다시 시도하면 된다)", sid);
+        // [1.3.0] 대기 중인 조인자도 상한을 둔다 — 자리를 기다리는 동안의 메모리·스레드가 무한히 늘지 않게
+        if (joiners.size() >= MAX_NEGOTIATIONS * 4) {
+            LOG.warn("[host] 동시 협상이 너무 많다 — sid={} 는 바쁨으로 알린다", sid);
+            send(sid, VillasMsg.description(MSG_BUSY, ""));
             return;
         }
         // 후보 목록은 지금 만든다 — 이 조인자의 후보가 바로 뒤이어 들어온다
@@ -365,17 +382,27 @@ public final class QuicHost {
         joiners.put(sid, theirs);
         try {
             negotiations.put(sid, worker.submit(() -> {
+                boolean acquired = false;
                 try {
+                    // [1.3.0] 원본 1.5.1: 협상 자리가 날 때까지 최대 4초 기다리고, 그래도 없으면 바로 "바쁨"을 알려
+                    // 조인자가 15초를 헛되이 기다리지 않게 한다.
+                    acquired = negotiating.tryAcquire(NEGOTIATION_WAIT_MS, TimeUnit.MILLISECONDS);
+                    if (!acquired) {
+                        LOG.warn("[host] 협상 자리가 없다 — sid={} 는 바쁨으로 알린다", sid);
+                        send(sid, VillasMsg.description(MSG_BUSY, ""));
+                        return;
+                    }
                     negotiate(sid, clientRelayForced, theirs);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
                 } finally {
                     joiners.remove(sid);
                     negotiations.remove(sid);
-                    negotiating.release();
+                    if (acquired) negotiating.release();
                 }
             }));
         } catch (RejectedExecutionException e) {
             joiners.remove(sid);
-            negotiating.release();
         }
     }
 

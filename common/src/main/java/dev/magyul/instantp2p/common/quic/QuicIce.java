@@ -81,6 +81,10 @@ final class QuicIce {
             int[] ip = ipv4(p[0]);
             if (ip == null) return null;
             if (ip[0] == 0 || ip[0] == 127 || ip[0] >= 224) return null;
+            // [1.3.0] 원본 1.5.1: 링크 로컬(169.254/16)은 전부 거부, 사설망·CGNAT는 host 후보만 허용한다.
+            // 서버는 내부망에 있는 경우가 많아 srflx/relay 후보로 내부 주소를 받으면 체크 패킷이 내부망으로 나간다.
+            if (ip[0] == 169 && ip[1] == 254) return null;
+            if (!"host".equals(p[2]) && isPrivateOrShared(ip)) return null;
             int port;
             try {
                 port = Integer.parseInt(p[1]);
@@ -93,6 +97,14 @@ final class QuicIce {
 
         /** 상대 한 명에게서 받는 후보 상한 — 정상은 host 2~3 + srflx 1 + relay 1 정도다. */
         static final int MAX_PER_PEER = 8;
+
+        /** 10/8, 172.16/12, 192.168/16, 100.64/10(CGNAT). */
+        static boolean isPrivateOrShared(int[] ip) {
+            return ip[0] == 10
+                    || (ip[0] == 172 && ip[1] >= 16 && ip[1] <= 31)
+                    || (ip[0] == 192 && ip[1] == 168)
+                    || (ip[0] == 100 && ip[1] >= 64 && ip[1] <= 127);
+        }
 
         private static int[] ipv4(String s) {
             String[] o = s.split("\\.", -1);
@@ -194,6 +206,14 @@ final class QuicIce {
         this.socket = new IceSocket(this, port);
     }
 
+    /** [1.3.0] 모르는 주소 패킷 폭주 방어가 켜지거나(true) 꺼질 때(false) 불린다. 소켓 수신 스레드에서 불린다. */
+    volatile java.util.function.Consumer<Boolean> onFlood;
+
+    /** [1.3.0] 이 IP에서 오는 패킷은 폭주 방어에서 항상 통과시킨다(상대 후보, STUN/TURN 서버, 확인된 이동). */
+    void markKnown(String ip) {
+        socket.markKnown(ip);
+    }
+
     /**
      * TURN allocation 을 잡아 relay 후보를 만든다. 방장은 항상 부르고(대칭 NAT 접속자를 받으려면
      * 필요), 접속자는 중계 강제일 때만 부른다 — 평소엔 방장의 relay 후보로 보내면 되고,
@@ -204,6 +224,7 @@ final class QuicIce {
         InetSocketAddress server = turnUrl != null ? TurnAllocation.parseUrl(turnUrl) : null;
         if (server == null || user == null || pass == null) return; // 계정을 못 받았으면 중계 없이
         TurnAllocation alloc = new TurnAllocation(socket, server, user, pass);
+        if (server.getAddress() != null) markKnown(server.getAddress().getHostAddress());
         if (alloc.allocate() != null) {
             turn = alloc;
             socket.turn = alloc;
@@ -278,6 +299,7 @@ final class QuicIce {
         try {
             InetSocketAddress stunServer = parseStunUrl(stunUrl);
             if (stunServer == null) return null;
+            if (stunServer.getAddress() != null) markKnown(stunServer.getAddress().getHostAddress());
             byte[] txId = Stun.newTransactionId();
             DatagramPacket req = Stun.packet(Stun.bindingRequest(txId), stunServer);
 
@@ -393,6 +415,7 @@ final class QuicIce {
         }
         if (SRFLX_ONLY && "host".equals(c.type())) return;  // 테스트 플래그 — 공인 주소로만 붙는다
         if (!remote.contains(c)) remote.add(c);
+        markKnown(c.ip()); // [1.3.0] 협상 중인 상대의 주소는 폭주 방어에서 통과
 
         // allocation 이 있으면 상대 IP 에 권한을 걸어 둔다 — 없으면 coturn 이 상대의 첫 패킷을
         // 버린다. 권한은 IP 단위라 상대가 대칭 NAT 로 포트를 바꿔도 통과한다(TurnAllocation 주석).
@@ -707,6 +730,7 @@ final class QuicIce {
         probe(to, () -> {
             if (addrKey(socket.actual(logical)).equals(k)) return;
             socket.moveTo(logical, to);
+            markKnown(to.getAddress().getHostAddress());
             // 주소는 남기지 않는다 — 상대의 공인 IP 다.
             LOG.info("[ice] 상대 주소가 바뀌어 새 주소로 옮겼다 — 연결은 그대로");
         });
@@ -828,6 +852,19 @@ final class QuicIce {
         private final Map<String, InetSocketAddress> cidOwner = new ConcurrentHashMap<>();
         /** 상대(처음 주소) → 마지막으로 뭐든 받은 시각 — 경로 감시가 끊김을 판정한다. */
         final Map<String, Long> lastRecv = new ConcurrentHashMap<>();
+        /** [1.3.0] 아는 주소(STUN/TURN 서버, 상대 후보, 확인된 이동) — 최대 4096개, 오래된 것부터 버린다. */
+        private final Map<String, Boolean> knownIps = java.util.Collections.synchronizedMap(
+                new java.util.LinkedHashMap<String, Boolean>(64, 0.75f, true) {
+                    @Override protected boolean removeEldestEntry(Map.Entry<String, Boolean> e) {
+                        return size() > 4096;
+                    }
+                });
+        private final FloodGuard guard;
+
+        void markKnown(String ip) {
+            if (ip != null) knownIps.put(ip, Boolean.TRUE);
+        }
+
         /** 우리 연결 ID 길이 — kwik 서버 기본값, 접속자는 QuicClient 가 같은 값으로 맞춘다. short header 에는 길이가 안 실린다. */
         static final int CID_LENGTH = 8;
 
@@ -878,6 +915,10 @@ final class QuicIce {
         IceSocket(QuicIce ice, int port) throws SocketException {
             super(new InetSocketAddress(port));
             this.ice = ice;
+            this.guard = new FloodGuard(on -> {
+                java.util.function.Consumer<Boolean> h = ice.onFlood;
+                if (h != null) h.accept(on);
+            });
             enlargeBuffers();
         }
 
@@ -940,17 +981,42 @@ final class QuicIce {
         @Override public void receive(DatagramPacket p) throws IOException {
             while (true) {
                 super.receive(p);
+                try {
+                    if (processReceived(p)) return;
+                } catch (RuntimeException e) {
+                    // [1.3.0] 원본 1.5.1: 깨진 패킷 하나가 kwik 수신 루프를 죽이지 않게 버린다.
+                    noteReceiveError(e);
+                }
+            }
+        }
+
+        private volatile long lastReceiveErrorLog;
+
+        private void noteReceiveError(RuntimeException e) {
+            long now = System.currentTimeMillis();
+            if (now - lastReceiveErrorLog < 60_000) return;
+            lastReceiveErrorLog = now;
+            LOG.warn("[quic-ice] 잘못된 패킷을 버렸다: {} (분당 한 번만 기록)", e.toString());
+        }
+
+        /** @return 수신 결과를 호출자(kwik)에게 돌려줘야 하면 true, 버리고 다음 패킷을 읽어야 하면 false */
+        private boolean processReceived(DatagramPacket p) {
+            {
                 TurnAllocation alloc = turn;
                 InetSocketAddress from = (InetSocketAddress) p.getSocketAddress();
 
                 // 수신 루프를 깨우는 자기 앞 패킷은 그대로 돌려준다(stopOwnLoop). TCP 중계에서는
                 // 서버 메시지도 자기 주소로 들어오므로 이걸 먼저 걸러야 한다 — 안 그러면 삼켜져서
                 // 루프가 안 멈추고 kwik 의 패킷을 계속 가로챈다.
-                if (isWake(p, from)) return;
+                if (isWake(p, from)) return true;
 
                 // TURN 서버에서 온 것이면 껍데기를 벗겨 상대가 직접 보낸 것처럼 만든다.
                 if (alloc != null && alloc.fromServer(from)) {
-                    if (!unwrapRelayed(p, alloc)) continue; // 우리가 다룰 게 아니면 버린다
+                    if (!unwrapRelayed(p, alloc)) return false; // 우리가 다룰 게 아니면 버린다
+                } else if (!from.getAddress().isLoopbackAddress()) {
+                    // [1.3.0] 모르는 주소에서 몰려드는 패킷 방어(TURN 서버 경유는 위에서 이미 걸러졌다)
+                    String ip = from.getAddress().getHostAddress();
+                    if (!guard.admit(ip, knownIps.get(ip) != null, System.currentTimeMillis())) return false;
                 }
 
                 InetSocketAddress src = (InetSocketAddress) p.getSocketAddress();
@@ -958,7 +1024,7 @@ final class QuicIce {
                 if (Stun.looksLikeStun(p.getData(), p.getOffset(), p.getLength())) {
                     lastRecv.put(addrKey(logical != null ? logical : src), System.currentTimeMillis());
                     ice.onStun(p); // 출처는 그대로 둔다 — 체크 응답은 실제 주소로 짝을 맞춘다
-                    continue; // QUIC에는 넘기지 않는다
+                    return false; // QUIC에는 넘기지 않는다
                 }
                 String cid = dcid(p.getData(), p.getOffset(), p.getLength());
                 if (logical == null && cid != null) {
@@ -971,11 +1037,14 @@ final class QuicIce {
                 if (logical != null) p.setSocketAddress(logical); // kwik 에는 처음 주소로 보인다
                 InetSocketAddress who = logical != null ? logical : src;
                 if (cid != null) {
-                    if (cidOwner.size() > 4096) cidOwner.clear(); // ponytail: 오래된 연결 ID 를 하나씩 치우는 대신 통째로 비운다
+                    if (cidOwner.size() >= 4096) { // [1.3.0] 통째로 비우지 않고 하나만 치운다(원본 1.5.1)
+                        java.util.Iterator<String> it = cidOwner.keySet().iterator();
+                        if (it.hasNext()) { it.next(); it.remove(); }
+                    }
                     cidOwner.putIfAbsent(cid, who);
                 }
                 lastRecv.put(addrKey(who), System.currentTimeMillis());
-                return;
+                return true;
             }
         }
 

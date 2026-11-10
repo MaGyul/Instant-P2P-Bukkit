@@ -238,11 +238,23 @@ public final class P2PCore {
         platform.broadcastRoomState(buf.toByteArray());
     }
 
+    /** room_state 등급 목록 상한 (원본 1.5.1 P2PNet.readRanks). */
+    static final int MAX_RANKS = 64;
+
     private static Map<UUID, Integer> rankMap(Collection<UUID> online) {
         Map<UUID, Integer> out = new LinkedHashMap<>();
         for (UUID id : online) {
             int rank = ExpelManager.priority(id); // 방장이므로 자기 Roles 사본으로 계산된다
             if (rank > 0) out.put(id, rank);
+        }
+        // [1.3.0] 원본 1.5.1 클라이언트는 등급 목록이 64개를 넘으면 패킷을 거부(예외)한다 — 높은 등급부터 64명만 보낸다.
+        if (out.size() > MAX_RANKS) {
+            Map<UUID, Integer> capped = new LinkedHashMap<>();
+            out.entrySet().stream()
+                    .sorted(Map.Entry.<UUID, Integer>comparingByValue().reversed())
+                    .limit(MAX_RANKS)
+                    .forEach(e -> capped.put(e.getKey(), e.getValue()));
+            return capped;
         }
         return out;
     }
