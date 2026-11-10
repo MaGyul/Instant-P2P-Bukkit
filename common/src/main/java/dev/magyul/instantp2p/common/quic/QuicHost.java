@@ -77,6 +77,8 @@ public final class QuicHost {
     private static final long NEGOTIATION_WAIT_MS = 4_000L;
     /** 랑데부 연결이 이만큼은 유지돼야 백오프를 처음으로 되돌린다 — 붙자마자 끊기는 루프에서 재접속이 몰리지 않게. */
     private static final long STABLE_MS = 20_000L;
+    /** 접속자가 떠난 뒤 서버 쪽 소켓을 닫기 전에 남은 데이터를 비우는 시간. */
+    private static final long CLIENT_LEFT_GRACE_MS = 400L;
     private static final int DIAL_TIMEOUT_MS = 5_000;
     /** 조인자의 2단계 시도(직결 2초 + 중계 30초)보다 길어야 방장이 먼저 포기하지 않는다. */
     private static final long PUNCH_MS = 35_000L;
@@ -784,23 +786,40 @@ public final class QuicHost {
             tunnels.unregister(registered);
             if (registered != null) peer.tunnels.remove(registered);
         };
+        // [1.3.0] 접속자가 먼저 떠나면 서버 쪽 소켓을 바로 닫지 않고 쓰기만 닫는다(FIN) — 서버가 보내던 데이터가 남은 채로
+        // 닫으면 RST가 나가 Velocity 같은 프록시가 "Connection reset" 오류를 찍는다. Velocity는 FIN에 바로 닫지 않으므로(반닫기 허용)
+        // 남은 데이터를 읽어 비울 짧은 시간({@link #CLIENT_LEFT_GRACE_MS}) 뒤 닫는다 — 이 사이 서버가 보낸 것은 읽어서 버린다.
+        Runnable clientLeft = () -> {
+            if (closed.get()) return;
+            try { tcp.shutdownOutput(); } catch (IOException ignored) {}
+            try {
+                watchdog.schedule(closeBoth, CLIENT_LEFT_GRACE_MS, TimeUnit.MILLISECONDS);
+            } catch (RejectedExecutionException e) {
+                closeBoth.run();
+            }
+        };
         try {
-            pump("quic-host-up", tcp.getInputStream(), stream.getOutputStream(), closeBoth, null, null);
+            pump("quic-host-up", tcp.getInputStream(), stream.getOutputStream(), closeBoth, null, null, clientLeft);
             // 접속자 → 서버 방향만 전송량을 제한한다. 계속 한도를 넘기면 연결을 끊고 출발지를 10분 막는다.
-            pump("quic-host-down", stream.getInputStream(), tcp.getOutputStream(), closeBoth, peer.upload, () -> {
+            pump("quic-host-down", stream.getInputStream(), tcp.getOutputStream(), clientLeft, peer.upload, () -> {
                 LOG.warn("[quic-host] 접속자 업로드가 한도를 계속 넘어 연결을 끊고 출발지를 {}분 막는다", DENY_MS / 60_000);
                 deny(peer.source);
                 conn.close();
-            });
+            }, null);
         } catch (IOException e) {
             closeBoth.run();
         }
     }
 
+    /**
+     * @param onSinkBroken 쓰기 쪽(접속자)이 이미 떠나 쓰기가 실패했을 때 — 널이 아니면 읽기는 끝까지 이어 가며 버린다(서버가 보내던
+     *                     데이터를 읽어 내야 소켓을 닫을 때 RST가 안 나간다). 서버가 소켓을 닫거나 강제 종료 때까지.
+     */
     private static void pump(String name, InputStream in, OutputStream out, Runnable onEnd,
-                             UploadThrottle throttle, Runnable onAbuse) {
+                             UploadThrottle throttle, Runnable onAbuse, Runnable onSinkBroken) {
         Thread t = new Thread(() -> {
             byte[] buf = new byte[PIPE_BUF];
+            boolean sinkBroken = false;
             try {
                 int n;
                 while ((n = in.read(buf)) > 0) {
@@ -812,8 +831,15 @@ public final class QuicHost {
                         }
                         if (wait > 0) Thread.sleep(wait);
                     }
-                    out.write(buf, 0, n);
-                    out.flush();
+                    if (sinkBroken) continue; // 버린다
+                    try {
+                        out.write(buf, 0, n);
+                        out.flush();
+                    } catch (IOException e) {
+                        if (onSinkBroken == null) throw e;
+                        sinkBroken = true;
+                        onSinkBroken.run();
+                    }
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();

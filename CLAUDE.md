@@ -233,6 +233,10 @@ Fabric 클라이언트 GameTest는 사람 입력을 막아 AuthMe 로그인이 �
 - kwik은 연결 종료 뒤 sender 스레드에서 `Statistics`/`SendStatistics`를 처음 로드한다. Spigot은 비활성화 때 jar를 닫아
   `zip file closed`가 나므로 `QuicHost.start`에서 미리 로드한다.
 
+### 터널 닫기 (Velocity에서 확인)
+- 접속자가 먼저 떠나면 서버 쪽 소켓을 바로 `close()`하지 않는다: 쓰기만 닫고(FIN) `CLIENT_LEFT_GRACE_MS`(400ms) 동안 서버가 보내는 것을 읽어 버린 뒤 닫는다. 바로 닫으면 읽지 않은 데이터 때문에 RST가 나가
+  Velocity가 `exception encountered in ClientPlaySessionHandler: Connection reset` ERROR를 찍는다(Paper는 조용히 "Disconnected"). Velocity는 FIN에 바로 닫지 않는다(반닫기 허용). 개선 뒤 5회 퇴장·재입장에서 0건.
+
 ### 서버 로직
 - expel은 영구 밴이 아니라 **차단자 기준**: holders에 기록, 차단자가 나가면 해제. 클라이언트가 접속 때마다 목록을 재전송하므로 **오프라인 대상도 기록**해야 한다.
 - 우선순위: 무등급 0, 방송인 1(readmit 외엔 `allowBroadcast` 필요), 서포터 2, 개발자 3, 호스트 4. `sender > target`일 때만 실행, 호스트는 expel/kick 대상 아님.
