@@ -3,6 +3,8 @@ package dev.magyul.instantp2p.fabric.impl;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
+import dev.magyul.instantp2p.common.MinecraftVersions;
+import dev.magyul.instantp2p.common.core.DialogSpec;
 import dev.magyul.instantp2p.common.core.P2PCommand;
 import dev.magyul.instantp2p.common.core.P2PCore;
 import dev.magyul.instantp2p.common.core.P2PSender;
@@ -53,7 +55,23 @@ final class FabricCommand {
         CommandSourceStack src = ctx.getSource();
         // 콘솔은 평문, 플레이어는 코드를 숨긴 복사 버튼 (P2PText)
         boolean player = src.getPlayer() != null;
-        P2PSender sender = (key, a) -> src.sendSystemMessage(FabricText.translatable(key, player ? a : P2PText.plain(a)));
+        // 다이얼로그는 MC 1.21.6+ 플레이어만 — 그 아래 버전·콘솔·시그니처 불일치(LinkageError)는 채팅 폴백
+        boolean dialogs = player && MinecraftVersions.atLeast(core.platform().minecraftVersion(), 1, 21, 6);
+        P2PSender sender = new P2PSender() {
+            @Override public void send(String key, Object... a) {
+                src.sendSystemMessage(FabricText.translatable(key, player ? a : P2PText.plain(a)));
+            }
+
+            @Override public boolean dialog(DialogSpec spec) {
+                if (!dialogs) return false;
+                try {
+                    FabricDialogs.show(src.getPlayer(), spec);
+                    return true;
+                } catch (LinkageError | RuntimeException e) {
+                    return false;
+                }
+            }
+        };
         P2PCommand.execute(core, sender, args);
         return 1;
     }
