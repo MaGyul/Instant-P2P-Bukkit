@@ -151,13 +151,26 @@ public final class HostController {
         publicOverride = forcePublic;
         state = RoomState.OPENING;
         sender.send(K + "open.opening");
+        if (publicRoomRequested() && franchiseConsentMissing()) sender.send(K + "consent.public_blocked");
         if (forcePublic && !core.settings().publicRoom()) sender.send(K + "open.public");
         executor.execute(() -> doOpen(sender));
     }
 
     /** 공개 방 목록에 올리는지 — 설정의 publicRoom, 또는 이번 방만 {@code /p2p open publicRoom} */
     public boolean publicRoomActive() {
+        return publicRoomRequested() && !franchiseConsentMissing();
+    }
+
+    /** 설정 publicRoom 또는 이번 방만 {@code /p2p open publicRoom}. */
+    private boolean publicRoomRequested() {
         return core.settings().publicRoom() || publicOverride;
+    }
+
+    /** [1.3.0] 가맹점 공개 방은 방장 동의가 있어야 연다(가맹점 F4와 같은 규칙). 공식 서버는 서버가 핸드셰이크에서 판단한다. */
+    private boolean franchiseConsentMissing() {
+        if (core.settings().effectiveServer() != dev.magyul.instantp2p.common.signaling.SignalingServer.FRANCHISE) return false;
+        String uuid = core.account().uuid();
+        return uuid == null || !core.consent().hasHost(uuid, dev.magyul.instantp2p.common.signaling.SignalingServer.FRANCHISE);
     }
 
     public void close(P2PSender sender) {

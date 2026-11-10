@@ -32,7 +32,11 @@ public final class I18n {
      */
     private static final Set<String> NO_PREFIX = Set.of(
             "copy", "copy.hover", "status.direct", "status.relay", "server.official", "server.franchise",
-            "terms.body", "terms.server_note", "terms.disclaimer", "terms.prompt", "terms.accept", "terms.deny");
+            "terms.body", "terms.server_note", "terms.disclaimer", "terms.prompt", "terms.accept", "terms.deny",
+            // 동의 화면: 본문 줄과 버튼 문구 (제목 줄에만 머리말)
+            "consent.official.p1.body", "consent.official.p2.body", "consent.official.p3.body", "consent.official.p4.body",
+            "consent.franchise.p1.body", "consent.franchise.p2.body", "consent.franchise.p3.body", "consent.franchise.p4.body",
+            "consent.note", "consent.prompt", "consent.next", "consent.agree", "consent.deny");
     /**
      * 머리말을 붙이는 모드 키 — 서버가 관리자에게 보내는 알림. 문구는 클라이언트가 번역하므로 플랫폼이 번역 컴포넌트
      * <b>바깥 앞에</b> 머리말 조각을 붙인다({@link #hasPrefix}, {@link #plainFallback}).

@@ -26,6 +26,7 @@ import java.util.stream.Collectors;
  *   /p2p reload     설정 파일 다시 읽기
  *   /p2p max-players [on|off|set &lt;인원&gt;]   P2P 최대 인원 (설정 파일에 저장)
  *   /p2p server [official|franchise [accept|deny]]   방을 올릴 서버 (가맹점은 약관 동의, 설정 파일에 저장)
+ *   /p2p consent [쪽|accept|deny|forget]   공개 방 방장 동의 문구 보기·동의 기록(자동 동의 없음)
  *   /p2p java [fix [always]|ignore|forget]   Java 취약점(CVE-2026-91403) 점검·우회 선택
  * </pre>
  * 권한: {@value #PERMISSION} (Fabric은 op).
@@ -34,7 +35,7 @@ public final class P2PCommand {
 
     public static final String NAME = "p2p";
     public static final String PERMISSION = "instantp2p.admin";
-    public static final List<String> SUBCOMMANDS = List.of("status", "login", "logout", "open", "close", "code", "newcode", "reload", "max-players", "server", "java");
+    public static final List<String> SUBCOMMANDS = List.of("status", "login", "logout", "open", "close", "code", "newcode", "reload", "max-players", "server", "java", "consent");
     public static final List<String> MAX_PLAYERS_ACTIONS = List.of("on", "off", "set");
     public static final List<String> SERVERS = List.of("official", "franchise");
     public static final List<String> JAVA_ACTIONS = List.of("fix", "ignore", "forget");
@@ -69,6 +70,7 @@ public final class P2PCommand {
             case "max-players" -> maxPlayers(core, sender, args);
             case "server" -> server(core, sender, args);
             case "java" -> java(sender, args);
+            case "consent" -> consent(core, sender, args);
             default -> sender.send(K + "usage");
         }
     }
@@ -89,6 +91,10 @@ public final class P2PCommand {
         if (args.length == 2 && args[0].equalsIgnoreCase("server")) {
             String prefix = args[1].toLowerCase(Locale.ROOT);
             return SERVERS.stream().filter(s -> s.startsWith(prefix)).toList();
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("consent")) {
+            String prefix = args[1].toLowerCase(Locale.ROOT);
+            return List.of("accept", "deny", "forget", "1", "2", "3", "4").stream().filter(s -> s.startsWith(prefix)).toList();
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("java")) {
             String prefix = args[1].toLowerCase(Locale.ROOT);
@@ -174,6 +180,87 @@ public final class P2PCommand {
                 sender.send(K + "jre.forgot");
             }
             default -> sender.send(K + "jre.usage");
+        }
+    }
+
+    /**
+     * {@code /p2p consent [쪽|accept|deny|forget]} — 방장 동의. 문구를 쪽별로 보여 주고(채팅 폴백), 마지막 쪽의
+     * [동의합니다]/[동의하지 않음] 버튼으로 고른다. 동의는 방장 계정(UUID)에 기록하고 시그널링 서버에도 보낸다.
+     */
+    private static void consent(P2PCore core, P2PSender sender, String[] args) {
+        SignalingServer server = core.settings().effectiveServer();
+        String kind = server == SignalingServer.FRANCHISE ? "franchise" : "official";
+        HostAccount account = core.account();
+        String arg = args.length > 1 ? args[1].toLowerCase(Locale.ROOT) : "";
+        switch (arg) {
+            case "" -> {
+                if (account.state() == HostAccount.State.LOGGED_IN && core.consent().hasHost(account.uuid(), server)) {
+                    sender.send(K + "consent.already");
+                    return;
+                }
+                showConsentPage(sender, kind, 1);
+            }
+            case "accept" -> {
+                if (account.state() != HostAccount.State.LOGGED_IN) {
+                    sender.send(K + "consent.need_login");
+                    return;
+                }
+                try {
+                    core.consent().recordHost(account.uuid(), server);
+                } catch (Exception e) {
+                    sender.send(K + "max_players.save_failed", String.valueOf(e.getMessage()));
+                    return;
+                }
+                sender.send(K + "consent.done");
+                String token = account.publishTokenOrNull();
+                Thread t = new Thread(() -> {
+                    boolean ok = dev.magyul.instantp2p.common.signaling.Consent.post(token, server);
+                    core.platform().runSync(() -> sender.send(K + (ok ? "consent.done_server" : "consent.post_failed")));
+                }, "instant-p2p-consent");
+                t.setDaemon(true);
+                t.start();
+            }
+            case "deny" -> sender.send(K + "consent.denied");
+            case "forget" -> {
+                if (account.state() != HostAccount.State.LOGGED_IN) {
+                    sender.send(K + "consent.need_login");
+                    return;
+                }
+                try {
+                    core.consent().forgetHost(account.uuid(), server);
+                } catch (Exception e) {
+                    sender.send(K + "max_players.save_failed", String.valueOf(e.getMessage()));
+                    return;
+                }
+                sender.send(K + "consent.forgot");
+            }
+            default -> {
+                int page;
+                try {
+                    page = Integer.parseInt(arg);
+                } catch (NumberFormatException e) {
+                    sender.send(K + "consent.usage");
+                    return;
+                }
+                if (page < 1 || page > dev.magyul.instantp2p.common.signaling.Consent.PAGES) sender.send(K + "consent.usage");
+                else showConsentPage(sender, kind, page);
+            }
+        }
+    }
+
+    private static void showConsentPage(P2PSender sender, String kind, int page) {
+        int last = dev.magyul.instantp2p.common.signaling.Consent.PAGES;
+        String base = K + "consent." + kind + ".p" + page;
+        sender.send(base + ".title");
+        sender.send(base + ".body");
+        if (page == last) {
+            sender.send(K + "consent.note");
+            sender.send(K + "consent.prompt", page, last,
+                    new P2PText.Run("/" + NAME + " consent accept", K + "consent.agree"),
+                    new P2PText.Run("/" + NAME + " consent deny", K + "consent.deny"));
+        } else {
+            sender.send(K + "consent.prompt", page, last,
+                    new P2PText.Run("/" + NAME + " consent " + (page + 1), K + "consent.next"));
         }
     }
 
@@ -319,6 +406,9 @@ public final class P2PCommand {
         sender.send(K + (core.settings().enabled() ? "status.auto_on" : "status.auto_off"));
         maxPlayersStatus(core, sender);
         serverStatus(core, sender);
+        if (account.state() == HostAccount.State.LOGGED_IN) {
+            sender.send(K + (core.consent().hasHost(account.uuid(), core.settings().effectiveServer()) ? "consent.status_yes" : "consent.status_no"));
+        }
         if (JreGuard.level() != JreGuard.Level.OK || JreGuard.patch() == JreGuard.Patch.MITIGATED) javaStatus(sender);
     }
 

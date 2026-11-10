@@ -50,6 +50,8 @@ public final class P2PCore {
     private final ExpelManager expel;
     private final P2PBridge bridge;
     private final HostAccount account;
+    /** 방장 동의 기록(공개 방 / 공식 서버) */
+    private final dev.magyul.instantp2p.common.signaling.Consent consent;
     private final HostController host;
     /** 가맹점 서버 상태 보고 — 가맹점 서버일 때만 보낸다 */
     private final Presence presence;
@@ -64,6 +66,7 @@ public final class P2PCore {
         this.expel = new ExpelManager(platform, this::broadcastRoomState);
         this.bridge = new P2PBridge(this);
         this.account = new HostAccount(platform.dataFolder(), platform.settings().serverUuid().toString());
+        this.consent = new dev.magyul.instantp2p.common.signaling.Consent(platform.dataFolder());
         this.host = new HostController(this);
         P2PSettings s = platform.settings();
         P2PConfig.useServer(s.effectiveServer());
@@ -106,6 +109,7 @@ public final class P2PCore {
     public ExpelManager expel() { return expel; }
     public P2PBridge bridge() { return bridge; }
     public HostAccount account() { return account; }
+    public dev.magyul.instantp2p.common.signaling.Consent consent() { return consent; }
     public HostController host() { return host; }
 
     /** IP 복원이 꺼진 상태인지 — 관리자가 입장할 때마다 다시 알린다. */
