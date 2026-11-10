@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "p2p-clienttest",
+  "version": "1.0.0",
+  "name": "p2p client test",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["dev.magyul.instantp2p.clienttest.P2PAutoJoin"],
+    "fabric-client-gametest": ["dev.magyul.instantp2p.clienttest.P2PJoinTest"]
+  },
+  "depends": {
+    "fabric-client-gametest-api-v1": "*"
+  }
+}

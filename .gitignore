@@ -24,4 +24,8 @@ run
 # Fabric 개발 서버
 run-fabric
 
-original
+original/
+gametest/libs/
+gametest/run-client/
+gametest/build/
+gametest/.gradle/
