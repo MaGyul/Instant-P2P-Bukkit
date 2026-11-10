@@ -51,13 +51,14 @@ loom {
         }
         // 로그인 정보(AuthMe)를 일반 실행과 GameTest가 같이 쓰도록 같은 폴더를 쓴다
         configureEach {
-            runDir = "run-client"
+            runDir = providers.gradleProperty("p2p.runDir").getOrElse("run-client")
             val code = providers.gradleProperty("p2p.code").orNull
             if (code != null) vmArg("-Dp2p.code=$code")
             providers.gradleProperty("p2p.holdSeconds").orNull?.let { vmArg("-Dp2p.holdSeconds=$it") }
             providers.gradleProperty("p2p.profile").orNull?.let { vmArg("-Dp2p.profile=$it") }
             providers.gradleProperty("p2p.control").orNull?.let { vmArg("-Dp2p.control=$it") }
             providers.gradleProperty("p2p.relay").orNull?.let { vmArg("-Dp2p.relay=$it") }
+            providers.gradleProperty("p2p.waitgo").orNull?.let { vmArg("-Dp2p.waitgo=$it") }
         }
     }
 }

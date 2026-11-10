@@ -66,6 +66,10 @@ public class P2PAutoJoin implements ClientModInitializer {
                         if (franchise && !franchiseReady()) {
                             System.out.println("[P2PTest] 가맹점 설정이 필요합니다 — 모드의 서버 선택에서 가맹점을 고르고 약관을 읽은 뒤 직접 동의하세요 (최대 15분). 설정이 기록되면 자동으로 입장합니다");
                             go(State.WAIT_SETUP);
+                        } else if (control && Boolean.getBoolean("p2p.waitgo")) {
+                            // 여러 클라이언트를 같은 순간에 입장시키려고 — control 파일의 connect를 기다린다
+                            System.out.println("[P2PTest] 로그인 완료 — connect 명령을 기다립니다");
+                            go(State.CONTROL);
                         } else {
                             connect(client, code);
                         }
