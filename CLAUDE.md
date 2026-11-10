@@ -250,7 +250,7 @@ Fabric 클라이언트 GameTest는 사람 입력을 막아 AuthMe 로그인이 �
 - 알려진 한계 — **조사 결과(원인은 Velocity 쪽)**: Velocity에서 접속자가 나가도 프록시가 세션을 약 15~30초 들고 있다가 `kicked from server lobby: disconnect.timeout` 또는 `Connection reset`으로 정리하는 경우가 있다
   (3.5.1·4.2.1 모두, 직결·중계 모두 가능). 서버 쪽 추적 로그로 확인한 사실: 호스트는 접속자 퇴장을 **같은 초에** 알고(스트림 종료 → 터널 소켓 FIN/닫기) 정상 처리했다 — 깨끗하게 끝난 회차와 오래 남은 회차의 호스트 로그가 동일했다.
   따라서 QUIC 종료 신호 유실이 아니고, Velocity가 닫힌 클라이언트 소켓을 바로 알아차리지 못하는 것이다(다음 keepalive 쓰기 때 RST를 만나서야 정리 — 간격이 약 15초). 우리가 소켓을 더 일찍·세게 닫아도 바뀌지 않는다.
-  Paper·Fabric·Spigot은 같은 상황에서 항상 즉시 정리됐다. **완화**: velocity.toml의 `kick-existing-players = true`로 두면 같은 계정의 재접속이 남은 세션을 밀어내고 들어온다(README 안내).
+  Paper·Fabric·Spigot은 같은 상황에서 항상 즉시 정리됐다. **완화**: velocity.toml의 `kick-existing-players = true`로 두면 같은 계정의 재접속이 남은 세션을 밀어내고 들어온다(README 안내). **시험 확인**: 퇴장 2.5초 뒤 같은 계정 재입장을 7회 반복 — `kick-existing-players = true`에서 7회 모두 입장, "이미 연결됨" 거부 0건, 남은 세션은 `multiplayer.disconnect.duplicate_login`으로 밀려났다.
 
 ### 서버 로직
 - expel은 영구 밴이 아니라 **차단자 기준**: holders에 기록, 차단자가 나가면 해제. 클라이언트가 접속 때마다 목록을 재전송하므로 **오프라인 대상도 기록**해야 한다.
