@@ -28,6 +28,29 @@ final class AdventureText implements ServerText {
         sender.sendMessage(translatable(key, args));
     }
 
+    /** Paper Dialog API(1.21.7+)가 있는지 — 없으면 다이얼로그 클래스를 건드리지 않는다. */
+    private static final boolean DIALOG_API = detectDialogApi();
+
+    private static boolean detectDialogApi() {
+        try {
+            Class.forName("io.papermc.paper.dialog.Dialog");
+            return true;
+        } catch (ClassNotFoundException | LinkageError e) {
+            return false;
+        }
+    }
+
+    @Override
+    public boolean dialog(CommandSender sender, dev.magyul.instantp2p.common.core.DialogSpec spec) {
+        if (!DIALOG_API || !(sender instanceof Player player)) return false;
+        try {
+            PaperDialogs.show(player, spec);
+            return true;
+        } catch (Throwable t) { // API 불일치 등 — 채팅으로 폴백
+            return false;
+        }
+    }
+
     @Override
     public void disallow(AsyncPlayerPreLoginEvent event, AsyncPlayerPreLoginEvent.Result result, String key, Object... args) {
         event.disallow(result, translatable(key, args));

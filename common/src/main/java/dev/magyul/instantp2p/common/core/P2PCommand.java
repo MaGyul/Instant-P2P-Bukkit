@@ -198,7 +198,18 @@ public final class P2PCommand {
                     sender.send(K + "consent.already");
                     return;
                 }
-                showConsentPage(sender, kind, 1);
+                List<String> body = new java.util.ArrayList<>();
+                for (int n = 1; n <= dev.magyul.instantp2p.common.signaling.Consent.PAGES; n++) {
+                    body.add(K + "consent." + kind + ".p" + n + ".title");
+                    body.add(K + "consent." + kind + ".p" + n + ".body");
+                }
+                body.add(K + "consent.note");
+                // 다이얼로그면 네 쪽을 한 창에 스크롤로, 아니면 채팅에 쪽별로
+                if (!sender.dialog(new DialogSpec(K + "consent.title", new Object[0], body,
+                        List.of(new P2PText.Run("/" + NAME + " consent accept", K + "consent.agree"),
+                                new P2PText.Run("/" + NAME + " consent deny", K + "consent.deny"))))) {
+                    showConsentPage(sender, kind, 1);
+                }
             }
             case "accept" -> {
                 if (account.state() != HostAccount.State.LOGGED_IN) {
@@ -281,6 +292,13 @@ public final class P2PCommand {
 
     /** 가맹점 약관 전문 + [동의]/[거부] 버튼 (콘솔은 명령 평문) */
     private static void showTerms(P2PSender sender) {
+        // [1.3.0] 다이얼로그(MC 1.21.6+ 플레이어)면 스크롤되는 창으로, 아니면 채팅으로
+        if (sender.dialog(new DialogSpec(K + "terms.heading", new Object[]{SignalingServer.FRANCHISE_TERMS_VERSION},
+                List.of(K + "terms.body", K + "terms.server_note", K + "terms.disclaimer"),
+                List.of(new P2PText.Run("/" + NAME + " server franchise accept", K + "terms.accept"),
+                        new P2PText.Run("/" + NAME + " server franchise deny", K + "terms.deny"))))) {
+            return;
+        }
         sender.send(K + "terms.heading", SignalingServer.FRANCHISE_TERMS_VERSION);
         sender.send(K + "terms.body");
         sender.send(K + "terms.server_note");

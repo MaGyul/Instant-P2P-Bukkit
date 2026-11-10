@@ -276,5 +276,6 @@
   "instant-p2p-server.consent.required": "§eThis signaling server requires host consent. §7Read the text and agree with /p2p consent.",
   "instant-p2p-server.consent.public_blocked": "§eFranchise public rooms need host consent, so this room opens as an invite-code room only. §7/p2p consent",
   "instant-p2p-server.consent.status_yes": "§aHost consent: recorded",
-  "instant-p2p-server.consent.status_no": "§eHost consent: none (/p2p consent)"
+  "instant-p2p-server.consent.status_no": "§eHost consent: none (/p2p consent)",
+  "instant-p2p-server.consent.title": "§lHost consent"
 }

@@ -17,6 +17,11 @@ interface ServerText {
     /** 플레이어·콘솔 공용 */
     void send(CommandSender sender, String key, Object... args);
 
+    /** [1.3.0] 긴 안내를 다이얼로그로(Paper 1.21.7+ 플레이어). 못 하면 false → 채팅 폴백. */
+    default boolean dialog(CommandSender sender, dev.magyul.instantp2p.common.core.DialogSpec spec) {
+        return false;
+    }
+
     void disallow(AsyncPlayerPreLoginEvent event, AsyncPlayerPreLoginEvent.Result result, String key, Object... args);
 
     /** 입장 메시지 뒤에 번역 키 문구를 한 칸 띄워 붙인다. */
