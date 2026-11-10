@@ -78,8 +78,10 @@ public abstract class WebSocketClient {
         boolean ok = false;
         try {
             if (tls) {
-                javax.net.ssl.SSLSocket ssl = (javax.net.ssl.SSLSocket) ((javax.net.ssl.SSLSocketFactory)
-                        javax.net.ssl.SSLSocketFactory.getDefault()).createSocket(s, host, port, true);
+                // SSLSocketFactory.getDefault()는 처음 만든 기본 공장을 캐시한다 — [1.3.0] JreGuard가 기본 SSLContext를
+                // 바꿔 끼운 경우에도 적용되도록 지금의 기본 SSLContext에서 직접 받는다.
+                javax.net.ssl.SSLSocket ssl = (javax.net.ssl.SSLSocket) javax.net.ssl.SSLContext.getDefault()
+                        .getSocketFactory().createSocket(s, host, port, true);
                 // 기본 SSLSocket은 인증서 도메인을 확인하지 않는다 — 안 켜면 아무 도메인 인증서로 중간자 가능.
                 javax.net.ssl.SSLParameters params = ssl.getSSLParameters();
                 params.setEndpointIdentificationAlgorithm("HTTPS");
@@ -107,7 +109,27 @@ public abstract class WebSocketClient {
 
             String statusLine = readHeaderLine(in);
             if (statusLine == null || !statusLine.startsWith("HTTP/1.1 101")) {
-                throw new IOException("handshake failed: " + statusLine);
+                // [1.3.0] 거부 이유 헤더(X-Reject / X-Reject-Until)를 읽어 예외에 싣는다
+                String rejectCode = null;
+                long until = 0;
+                String h;
+                int guard = 0;
+                while (guard++ < 64 && (h = readHeaderLine(in)) != null && !h.isEmpty()) {
+                    int c = h.indexOf(':');
+                    if (c <= 0) continue;
+                    String name = h.substring(0, c).trim();
+                    String value = h.substring(c + 1).trim();
+                    if (name.equalsIgnoreCase("X-Reject") && value.length() <= 40) {
+                        rejectCode = value.toLowerCase(java.util.Locale.ROOT);
+                    } else if (name.equalsIgnoreCase("X-Reject-Until")) {
+                        try {
+                            until = Long.parseLong(value);
+                        } catch (NumberFormatException ignored) {
+                        }
+                    }
+                }
+                throw new HandshakeRejectedException(String.valueOf(statusLine),
+                        HandshakeRejectedException.parseStatus(statusLine), rejectCode, until);
             }
             String accept = null;
             String line;

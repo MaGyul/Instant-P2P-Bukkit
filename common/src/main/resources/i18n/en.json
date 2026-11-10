@@ -225,5 +225,6 @@
   "instant-p2p-server.terms.disclaimer": "§c[Disclaimer] §7The franchise server is a private server run separately by the operator of an unofficial modified build approved by the original developer. The developers of the Server Edition and of the original instant-p2p do not run or manage it. The choice to use the franchise server and all of its consequences (connection problems, data collection and retention, bans, damage to the server or accounts, etc.) are the sole responsibility of the server operator who chose it; this project and the original developer accept no liability whatsoever. Please direct franchise questions to the franchise operator.",
   "instant-p2p-server.host.rejected": "§cThe signaling server refused to open the room: %s §7(fix the cause, then /p2p close → /p2p open)",
   "instant-p2p-server.host.flood_on": "§cUDP packets are flooding in from unknown addresses and are being filtered. Players who are connected or connecting are not affected; this lifts automatically after 5 minutes.",
+  "instant-p2p-server.host.cooldown": "§eThe signaling server temporarily blocked opening rooms (too many opens/closes). Retrying automatically in about %s minute(s).",
   "instant-p2p-server.host.flood_off": "§aThe packet flood has stopped; the defense is lifted."
 }

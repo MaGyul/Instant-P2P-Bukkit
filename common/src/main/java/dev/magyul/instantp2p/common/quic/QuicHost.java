@@ -5,6 +5,7 @@ import dev.magyul.instantp2p.common.core.P2PCore;
 import dev.magyul.instantp2p.common.signaling.HardwareId;
 import dev.magyul.instantp2p.common.signaling.P2PConfig;
 import dev.magyul.instantp2p.common.signaling.VillasMsg;
+import dev.magyul.instantp2p.common.signaling.HandshakeRejectedException;
 import dev.magyul.instantp2p.common.signaling.WebSocketClient;
 import dev.magyul.instantp2p.common.tunnel.TunnelRegistry;
 import org.slf4j.Logger;
@@ -293,10 +294,67 @@ public final class QuicHost {
         } catch (Exception e) {
             // 401 = 토큰 문제(만료·로그아웃·차단). URL은 남기지 않는다(토큰이 들어 있다).
             LOG.warn("[host] Signaling connect failed: {}", e.getMessage());
+            if (e instanceof HandshakeRejectedException r && handleReject(r)) return;
             scheduleReconnect();
             return;
         }
         if (!running.get()) ws.close();
+    }
+
+    /**
+     * [1.3.0] 핸드셰이크 거부 이유(원본 1.5.1 {@code X-Reject}) → 관리자에게 보일 설명. 여기 있는 건 다시 붙어도 같은 결과라
+     * 재접속을 멈춘다. 원인을 해결한 뒤 {@code /p2p close → /p2p open}.
+     */
+    static final Map<String, String> REJECT_REASONS = Map.ofEntries(
+            Map.entry("banned", "이 계정 또는 기기는 중계 서버에서 차단되었습니다"),
+            Map.entry("no-host-perm", "이 계정은 중계 서버에서 방을 열 권한이 없습니다"),
+            Map.entry("no-public", "중계 서버가 지금 공개 방을 받지 않습니다 (설정 publicRoom을 끄거나 나중에 다시 시도)"),
+            Map.entry("host-blocked", "중계 서버에서 방 열기가 막혀 있습니다"),
+            Map.entry("too-many-rooms", "한 번에 열 수 있는 방 개수를 넘었습니다"),
+            Map.entry("too-old", "중계 서버가 이 서버 통합판 버전을 더 이상 받지 않습니다 — 새 버전으로 올려 주세요"),
+            Map.entry("unofficial", "중계 서버가 이 서버 통합판을 공식 배포본으로 인정하지 않습니다 — 원본·가맹점 개발자에게 문의하세요"),
+            Map.entry("java-old", "보안 취약점(CVE-2026-91403)이 있는 Java 버전이라 중계 서버가 거부했습니다 — Java를 업데이트하세요 (/p2p java)"),
+            Map.entry("need-consent-host", "공개 방 동의가 필요합니다 — /p2p consent"));
+
+    /** 거부 코드가 풀리는 시각을 모를 때 기다릴 시간 — 원본은 방을 반복해서 열고 닫을 때 약 10분 막는다. */
+    private static final long COOLDOWN_DEFAULT_MS = 600_000L;
+
+    /**
+     * @return 재접속 스케줄까지 여기서 처리했으면 true. false면 호출자가 평소처럼 재접속한다.
+     */
+    private boolean handleReject(HandshakeRejectedException r) {
+        String code = r.code();
+        if (code == null && r.status() == 426) code = "too-old";
+        if (code == null) return false;
+        if ("cooldown".equals(code)) {
+            long wait = r.untilEpochSec() > 0 ? r.untilEpochSec() * 1000L - System.currentTimeMillis() : COOLDOWN_DEFAULT_MS;
+            wait = Math.max(5_000L, Math.min(wait + 1_000L, 3_600_000L));
+            long minutes = Math.max(1, (wait + 59_999L) / 60_000L);
+            LOG.warn("[host] 시그널링 서버가 잠시 방 열기를 막았다(cooldown) — 약 {}분 뒤 다시 시도", minutes);
+            core.platform().runSync(() -> core.platform().notifyAdmins("instant-p2p-server.host.cooldown", String.valueOf(minutes)));
+            scheduleReconnectAfter(wait);
+            return true;
+        }
+        String why = REJECT_REASONS.get(code);
+        if (why == null) return false; // 모르는 코드 — 일시적일 수 있으니 평소처럼 재시도
+        fatalError = why;
+        LOG.warn("[host] 시그널링 서버가 방 열기를 거부했습니다 — {} ({})", why, code);
+        core.platform().runSync(() -> core.platform().notifyAdmins("instant-p2p-server.host.rejected", why));
+        return true;
+    }
+
+    private void scheduleReconnectAfter(long delayMs) {
+        if (!running.get() || fatalError != null) return;
+        try {
+            worker.execute(() -> {
+                try {
+                    TimeUnit.MILLISECONDS.sleep(delayMs);
+                } catch (InterruptedException e) {
+                    return;
+                }
+                openLobby();
+            });
+        } catch (RejectedExecutionException ignored) {}
     }
 
     /**
