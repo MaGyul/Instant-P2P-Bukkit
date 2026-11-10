@@ -277,5 +277,7 @@
   "instant-p2p-server.consent.public_blocked": "§eFranchise public rooms need host consent, so this room opens as an invite-code room only. §7/p2p consent",
   "instant-p2p-server.consent.status_yes": "§aHost consent: recorded",
   "instant-p2p-server.consent.status_no": "§eHost consent: none (/p2p consent)",
-  "instant-p2p-server.consent.title": "§lHost consent"
+  "instant-p2p-server.consent.title": "§lHost consent",
+  "instant-p2p-server.public.paused": "§ePublic room list unavailable: %s §7(rechecking every %s min; invite-code rooms stay open)",
+  "instant-p2p-server.public.refused": "§eThe server refused the public room: %s §7(fix the cause, then /p2p close → /p2p open)"
 }

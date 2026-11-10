@@ -197,7 +197,10 @@ public final class PublicRoomAnnouncer {
                 client.connect();
             } catch (Exception e) {
                 LOG.warn("[public-room] connect failed: {}", e.toString());
-                if (ws.contains(client)) scheduleReconnect(gen);
+                if (ws.contains(client)) {
+                    if (e instanceof HandshakeRejectedException r) handleRefusal(gen, r);
+                    else scheduleReconnect(gen);
+                }
                 return;
             }
             if (!isCurrent(gen) || !ws.contains(client)) {
@@ -220,6 +223,7 @@ public final class PublicRoomAnnouncer {
         return new WebSocketClient(url) {
             @Override public void onConnected() {
                 backoffMs = INITIAL_BACKOFF_MS;
+                pauseNotified = false;
                 send(VillasMsg.hello());
             }
             @Override public void onMessage(String type, String json) {
@@ -241,6 +245,69 @@ public final class PublicRoomAnnouncer {
                 if (ws.contains(this)) scheduleReconnect(gen);
             }
         };
+    }
+
+    /** 공개 방 상태를 다시 확인하는 간격 — 서버가 공개 방을 안 받는 동안 이 간격으로만 한 번씩 본다. */
+    private static final long PAUSED_RECHECK_MS = 600_000L;
+    /** 이번 중단에서 관리자에게 이미 알렸는지 — 다시 붙으면 풀린다. */
+    private volatile boolean pauseNotified;
+
+    /**
+     * 공개 방 연결을 서버가 거부했다(원본 1.5.1). 거부 코드가 해결 전엔 같은 결과인 종류면 재시도를 멈추고, 코드 없는 거부(403 등)는
+     * 서버의 공개 방 상태를 확인해서 점검 중(off)·역할 전용(roles)이면 {@link #PAUSED_RECHECK_MS}마다 한 번씩만 다시 확인한다.
+     * 확인이 안 되거나 받는 상태면 평소처럼 백오프 재접속.
+     */
+    private void handleRefusal(int gen, HandshakeRejectedException r) {
+        if (!isCurrent(gen)) return;
+        String code = r.code();
+        if ("cooldown".equals(code)) {
+            long wait = r.untilEpochSec() > 0 ? r.untilEpochSec() * 1000L - System.currentTimeMillis() : RejectCodes.COOLDOWN_DEFAULT_MS;
+            scheduleConnectAfter(gen, Math.max(5_000L, Math.min(wait + 1_000L, 3_600_000L)));
+            return;
+        }
+        String why = code == null ? null : RejectCodes.REASONS.get(code);
+        if (why != null) { // 다시 붙어도 같다 — 멈춘다. 원인을 해결한 뒤 /p2p close → /p2p open
+            LOG.warn("[public-room] 서버가 공개 방을 거부했습니다 — {} ({}). 재시도를 멈춥니다", why, code);
+            platform.runSync(() -> platform.notifyAdmins("instant-p2p-server.public.refused", why));
+            return;
+        }
+        PublicRoomsMode mode = PublicRoomsMode.fetch();
+        if (mode != null && (!mode.enabled() || mode.rolesOnly())) {
+            String text = mode.enabled()
+                    ? "역할이 있는 계정(개발자·서포터·방송인)만 공개 방을 열 수 있습니다"
+                    : (mode.notice().isBlank() ? "서버가 공개 방을 받지 않습니다" : mode.notice());
+            if (!pauseNotified) {
+                pauseNotified = true;
+                LOG.warn("[public-room] 공개 방 목록을 쓸 수 없습니다 — {}. {}분마다 다시 확인합니다 (초대 코드 방은 그대로 열려 있습니다)",
+                        text, PAUSED_RECHECK_MS / 60_000);
+                platform.runSync(() -> platform.notifyAdmins("instant-p2p-server.public.paused", text, PAUSED_RECHECK_MS / 60_000));
+            }
+            scheduleRecheck(gen);
+            return;
+        }
+        scheduleReconnect(gen);
+    }
+
+    /** 중단 중: 상태만 가볍게 다시 보고, 받는 상태가 되면 그때 연결한다. */
+    private void scheduleRecheck(int gen) {
+        try {
+            scheduler.schedule(() -> {
+                if (!isCurrent(gen)) return;
+                PublicRoomsMode m = PublicRoomsMode.fetch();
+                if (m != null && m.enabled() && !m.rolesOnly()) {
+                    LOG.info("[public-room] 서버가 공개 방을 다시 받습니다 — 연결합니다");
+                    connect(gen, connectedChannels);
+                } else {
+                    scheduleRecheck(gen);
+                }
+            }, PAUSED_RECHECK_MS, TimeUnit.MILLISECONDS);
+        } catch (RejectedExecutionException ignored) {}
+    }
+
+    private void scheduleConnectAfter(int gen, long delayMs) {
+        try {
+            scheduler.schedule(() -> connect(gen, connectedChannels), delayMs, TimeUnit.MILLISECONDS);
+        } catch (RejectedExecutionException ignored) {}
     }
 
     private void scheduleReconnect(int gen) {
