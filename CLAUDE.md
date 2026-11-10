@@ -149,6 +149,23 @@ v1_21=intermediary·v26=Mojang 이름을 검사한다.
 - `udpPort`: QUIC UDP 포트, 기본 0(임의). 이미 쓰이면 경고 후 임의 포트. 방화벽에서 열어 두면 직결이 잘 된다.
   25565 UDP는 `enable-query`, 24454는 Simple Voice Chat, 19132는 Geyser가 쓰므로 피하라고 안내.
 
+## 원본 1.5.1 / 가맹점 F4.0.2 대응 (서버판 1.3.0)
+
+원본 1.5.1은 디컴파일본(`original/*.zip`)만 있고, 가맹점 F4.0.2는 소스(`github.com/sion121024/instant-p2p-franchise`, 단일 커밋)가 공개돼 있다.
+두 시그널링 서버 모두 서버 쪽은 비공개라 "서버가 방장에게 요구하는 것"은 클라이언트 코드로 **추정**한 것이다 — 실서버로 확인한다.
+- **후보 검증**(`QuicIce.Candidate.parse`): 링크 로컬(169.254/16) 전부 거부, 사설망·CGNAT는 `host` 후보만. 수신 처리는 패킷별 try/catch. `FloodGuard`(모르는 주소 패킷 폭주 방어).
+- **QuicHost**: 출발지(IPv4/IPv6 /64/중계 ip:port)당 연결 6·미확인 3, 접속자→서버 업로드 1MB/s 스로틀(`UploadThrottle`, 과하면 연결 끊고 출발지 10분 차단),
+  협상 자리 4초 대기 후 `quic-busy`, 백오프는 20초 유지돼야 복귀, room_state 등급 64명 상한(클라이언트가 초과 시 예외).
+- **핸드셰이크 거부**(`HandshakeRejectedException`, `X-Reject`/`X-Reject-Until`): `QuicHost.REJECT_REASONS`의 코드는 재접속 중단 + 관리자 알림, `cooldown`은 until까지 대기.
+  방장 URL에 `ClientInfo`(`v`,`mc`,`j`,`b`=플러그인 jar SHA-256) — **사실만 보낸다**(위조 금지). `unofficial`/`too-old`가 나오면 등록은 운영자 협의 사항.
+- **공개 방 프로토콜**: 방장 WS로 `room`(+`opts.signed`는 `server.properties`의 enforce-secure-profile), `acl`, `peer(s)`, `bye`, `hostlog` 해시 체인(`HostLog`, 하트비트 5초 후 30초 주기 —
+  끊기면 서버가 `nolog`로 공개 목록에서 뺀다), 서버 `notice`(unsigned/title/quarantine/nolog) 처리. 월드 이벤트·`chatquery`/`signquery`/`bookquery` 응답은 아직 없음.
+- **JreGuard**(CVE-2026-91403): 신뢰 저장소에 `emSign ECC Root CA - G3`/`AAA Certificate Services` 루트가 있고 `blocked.certs`가 갱신판(≥70줄)이 아니면 UNPATCHED → 방 열기 차단.
+  `/p2p java fix [always]`는 서버 프로세스 전체의 기본 SSLContext에 영향을 주므로 **운영자가 고를 때만**. `P2PCore` 생성자 맨 앞에서 init(다른 HTTP 클라이언트보다 먼저), `WebSocketClient`는 `SSLContext.getDefault()`에서 직접 소켓 공장을 받는다.
+- **동의**(`Consent`, `/p2p consent`): 공식 rev 3 / 가맹점 rev 1, `POST /api/v1/consent?token=` `{"rev","role":"host"}`. **자동 동의 금지**. 가맹점 공개 방은 동의 없으면 열지 않는다(F4와 같음). 문구는 원본 lang 그대로 + 서버판 안내(`consent.note`).
+- **다이얼로그**: `P2PSender.dialog(DialogSpec)` — Paper 1.21.7+ 플레이어만 `PaperDialogs`(Dialog API 있을 때만 로드), 나머지는 채팅 폴백. Fabric(1.21.6+)·Velocity는 아직 폴백.
+- 가맹점 로비 ID: F4.0.1+는 모드 버전 앞 두 마디(`1.5.1`→`1.5`)만 해시 — 가맹점일 때만(`P2PConfig.lobbyVersion`). 공식은 전체 문자열.
+
 ## 건드리면 안 되는 것 (원본 모드 1.4.3과의 호환)
 
 - 인프라: 시그널링 `wss://kite-private-cloud.kro.kr`(평문 8090은 닫힘, 가맹점은 `p2p.sionserver.com` + TURN `turn.sionserver.com` — 같은 구조), STUN/TURN `:3490`(TURN 계정은 `/api/v1/turn/credentials?token=`로 발급, 고정 계정 없음).
