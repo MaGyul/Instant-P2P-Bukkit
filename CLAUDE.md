@@ -240,6 +240,7 @@ Fabric 클라이언트 GameTest는 사람 입력을 막아 AuthMe 로그인이 �
 - 일반 서버(Paper·Fabric): 직결 밴은 `P2PPlatform.runConsoleCommand`로 바닐라 `ban-ip`/`pardon-ip`에도 같이 올린다(바닐라 목록과 동기). Velocity는 해당 없음. 바닐라 `/ban-ip`를 직접 써도 중계 접속자 연동 차단은 그대로 동작.
 - Paper 1.21.11·실제 intermediary Fabric 1.21.11에서 확인: 직결 접속자 `/p2p ban-ip`는 바닐라 `ban-ip`에도 올라가(`banlist ips`에 같은 사유로 보임) 재접속이 거부되고, `/p2p pardon-ip #번호`가 바닐라 쪽도 같이 푼다. 중계 접속자는 바닐라 목록에 안 올라가고(`There are no bans`) 계정으로만 막힌다.
 - Spigot 1.21.11(빌드된 Spigot, `spigotreal/` 복사본)에서도 확인: 직결·중계 입장(입장 메시지 접속 방식 표시, IP 복원), 연속 입장, 직결·중계 `/p2p ban-ip`와 바닐라 연동, `/p2p max-players` 거부("서버가 꽉 찼습니다!", `PlayerLoginEvent` KICK_FULL 경로).
+- Fabric 26.3 서버(`v26` 구현, `fabric26real/` 복사본 + 공식 모드 1.5.1 클라이언트 `gametest26`)에서도 확인: 직결·중계 입장(IP 복원, 접속 방식 표시), 연속·반복 입장, 직결·중계 `/p2p ban-ip`와 바닐라 연동(`performPrefixedCommand`), `/p2p max-players` 거부("The server is full!", v26 `PlayerListMixin`). 서버가 가맹점 설정(`signalingServer: franchise`)이 남은 복사본이면 `/p2p server official`로 바꾼다. 클라이언트 jar는 `-Pp2p.mod=franchise`로 가맹점판 선택.
 - Velocity 4.2.1 + Fabric 백엔드에서 확인: 밴 → 즉시 퇴장 → 새 합성 주소로 재접속해도 사유와 함께 거부, 다른 계정 영향 없음, `pardon-ip #1` 뒤 재입장.
 
 ### 터널 닫기 (Velocity에서 확인)
