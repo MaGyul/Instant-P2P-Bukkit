@@ -29,3 +29,8 @@ gametest/libs/
 gametest/run-client/
 gametest/build/
 gametest/.gradle/
+run-26/
+gametest26/libs/
+gametest26/run-client/
+gametest26/build/
+gametest26/.gradle/

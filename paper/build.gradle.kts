@@ -25,11 +25,12 @@ tasks {
     }
 
     runServer {
-        minecraftVersion("1.21.11")
+        // -PmcVersion=26.3 -PrunDir=run-26 으로 다른 MC 버전·폴더에서 시험(월드는 앞으로만 업그레이드되므로 폴더를 나눈다)
+        minecraftVersion(providers.gradleProperty("mcVersion").getOrElse("1.21.11"))
         jvmArgs("-Xms2G", "-Xmx2G")
         // 개발 서버는 JDK 25로 — JDK 21.0.3 등 오래된 JDK는 JreGuard(CVE-2026-91403)가 방 열기를 막는다
         javaLauncher = project.extensions.getByType(JavaToolchainService::class.java).launcherFor { languageVersion = JavaLanguageVersion.of(25) }
-        runDirectory = rootProject.layout.projectDirectory.dir("run")
+        runDirectory = rootProject.layout.projectDirectory.dir(providers.gradleProperty("runDir").getOrElse("run"))
     }
 
     processResources {

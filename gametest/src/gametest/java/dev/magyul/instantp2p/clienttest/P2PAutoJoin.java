@@ -17,10 +17,12 @@ import net.minecraft.client.multiplayer.resolver.ServerAddress;
  * {@code -Dp2p.autojoin=true -Dp2p.code=<코드>}일 때만 동작한다.
  */
 public class P2PAutoJoin implements ClientModInitializer {
-    private enum State { WAIT_TITLE, WAIT_LOGIN, CONNECTING, WAIT_CONSENT, JOINED, DONE }
+    private enum State { WAIT_TITLE, WAIT_LOGIN, WAIT_SETUP, CONNECTING, WAIT_CONSENT, JOINED, DONE }
 
     private State state = State.WAIT_TITLE;
     private boolean askedConsent;
+    /** -Dp2p.profile=franchise: 가맹점 서버 시험 — 서버 선택·약관 동의(사람이 직접)가 settings.json에 기록될 때까지 기다린다 */
+    private final boolean franchise = "franchise".equalsIgnoreCase(System.getProperty("p2p.profile"));
     private long tick;
     private long stateSince;
 
@@ -55,11 +57,13 @@ public class P2PAutoJoin implements ClientModInitializer {
             case WAIT_LOGIN -> {
                 if (!"FabricMC".equals(client.getUser().getAccessToken())) {
                     if (inState > 40 && !(client.screen == null)) {
-                        System.out.println("[P2PTest] 로그인 확인: " + client.getUser().getName() + " — 입장 시도");
-                        String address = "quic." + code;
-                        ConnectScreen.startConnecting(client.screen, client, ServerAddress.parseString(address),
-                                new ServerData("p2p-test", address, ServerData.Type.OTHER), false, null);
-                        go(State.CONNECTING);
+                        System.out.println("[P2PTest] 로그인 확인: " + client.getUser().getName());
+                        if (franchise && !franchiseReady()) {
+                            System.out.println("[P2PTest] 가맹점 설정이 필요합니다 — 모드의 서버 선택에서 가맹점을 고르고 약관을 읽은 뒤 직접 동의하세요 (최대 15분). 설정이 기록되면 자동으로 입장합니다");
+                            go(State.WAIT_SETUP);
+                        } else {
+                            connect(client, code);
+                        }
                     }
                 } else if (inState > 20 * 60 * 15) {
                     finish(client, "TIMEOUT 로그인 대기 시간 초과");
@@ -84,13 +88,18 @@ public class P2PAutoJoin implements ClientModInitializer {
                     finish(client, "FAIL 입장 시간 초과(120초)");
                 }
             }
+            case WAIT_SETUP -> {
+                if (franchiseReady()) {
+                    System.out.println("[P2PTest] 가맹점 설정 확인 — 입장 시도");
+                    connect(client, code);
+                } else if (inState > 20 * 60 * 15) {
+                    finish(client, "TIMEOUT 가맹점 설정 대기 시간 초과");
+                }
+            }
             case WAIT_CONSENT -> {
                 if (consentRecorded()) {
                     System.out.println("[P2PTest] 동의 기록 확인 — 다시 입장 시도");
-                    String address = "quic." + code;
-                    ConnectScreen.startConnecting(client.screen, client, ServerAddress.parseString(address),
-                            new ServerData("p2p-test", address, ServerData.Type.OTHER), false, null);
-                    go(State.CONNECTING);
+                    connect(client, code);
                 } else if (inState > 20 * 60 * 15) {
                     finish(client, "TIMEOUT 동의 대기 시간 초과");
                 }
@@ -103,6 +112,25 @@ public class P2PAutoJoin implements ClientModInitializer {
                 }
             }
             case DONE -> { }
+        }
+    }
+
+    private void connect(Minecraft client, String code) {
+        String address = "quic." + code;
+        ConnectScreen.startConnecting(client.screen, client, ServerAddress.parseString(address),
+                new ServerData("p2p-test", address, ServerData.Type.OTHER), false, null);
+        go(State.CONNECTING);
+    }
+
+    private static boolean franchiseReady() {
+        try {
+            java.nio.file.Path f = net.fabricmc.loader.api.FabricLoader.getInstance().getConfigDir()
+                    .resolve("instant-p2p").resolve("settings.json");
+            if (!java.nio.file.Files.isRegularFile(f)) return false;
+            String t = java.nio.file.Files.readString(f);
+            return t.contains("\"FRANCHISE\"") && t.contains("termsAccepted");
+        } catch (java.io.IOException e) {
+            return false;
         }
     }
 

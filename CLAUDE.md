@@ -166,6 +166,15 @@ v1_21=intermediary·v26=Mojang 이름을 검사한다.
 - **다이얼로그**: `P2PSender.dialog(DialogSpec)` — Paper 1.21.7+ 플레이어만 `PaperDialogs`(Dialog API 있을 때만 로드), 나머지는 채팅 폴백. Fabric(1.21.6+)·Velocity는 아직 폴백.
 - 가맹점 로비 ID: F4.0.1+는 모드 버전 앞 두 마디(`1.5.1`→`1.5`)만 해시 — 가맹점일 때만(`P2PConfig.lobbyVersion`). 공식은 전체 문자열.
 
+## 클라이언트 입장 시험 (`gametest/`, `gametest26/`)
+
+원본 클라이언트 모드(`original/mods`)로 서버판 방에 실제로 들어가 본다. 메인 빌드와 분리된 Gradle 프로젝트(루트 settings에 없음).
+Fabric 클라이언트 GameTest는 사람 입력을 막아 AuthMe 로그인이 불가능하므로 **일반 클라이언트 + 자동 진행**(`P2PAutoJoin`)이다 — 정품 로그인·동의(공식 입장 동의, 가맹점 서버 선택·약관)는 사람이 하고 나머지는 자동.
+- 서버: `./gradlew :paper:runServer` (1.21.11, `run/`) 또는 `-PmcVersion=26.3 -PrunDir=run-26`(새 폴더는 `whitelist off` 필요). `/p2p login` → `/p2p open`. JDK 25로 돈다(JreGuard).
+- 클라이언트: `./gradlew -p gametest runAutoJoin -Pp2p.code=<코드>`(MC 1.21.11, 공식 1.5.1) / `./gradlew -p gametest26 runAutoJoin -Pp2p.code=<코드> -Pp2p.profile=franchise`(MC 26.3, 가맹점 F4.0.2).
+- AuthMe의 중첩 jar(`META-INF/jars`)는 `libs/`에 풀어 둔다(Loom이 개발 환경에서 안 풀어 줌, gitignore).
+- 결과는 클라이언트 로그의 `[P2PTest] RESULT PASS|FAIL …`. 서버 로그의 `join detected → punch done → QUIC connection accepted`로 서버 쪽도 확인.
+
 ## 건드리면 안 되는 것 (원본 모드 1.4.3과의 호환)
 
 - 인프라: 시그널링 `wss://kite-private-cloud.kro.kr`(평문 8090은 닫힘, 가맹점은 `p2p.sionserver.com` + TURN `turn.sionserver.com` — 같은 구조), STUN/TURN `:3490`(TURN 계정은 `/api/v1/turn/credentials?token=`로 발급, 고정 계정 없음).
