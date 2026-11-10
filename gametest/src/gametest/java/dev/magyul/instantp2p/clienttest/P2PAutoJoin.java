@@ -107,8 +107,13 @@ public class P2PAutoJoin implements ClientModInitializer {
             }
             case WAIT_SETUP -> {
                 if (franchiseReady()) {
-                    System.out.println("[P2PTest] 가맹점 설정 확인 — 입장 시도");
-                    connect(client, code);
+                    if (control && Boolean.getBoolean("p2p.waitgo")) {
+                        System.out.println("[P2PTest] 가맹점 설정 확인 — connect 명령을 기다립니다(공개 방 목록 등 화면은 직접 쓸 수 있습니다)");
+                        go(State.CONTROL);
+                    } else {
+                        System.out.println("[P2PTest] 가맹점 설정 확인 — 입장 시도");
+                        connect(client, code);
+                    }
                 } else if (inState > 20 * 60 * 15) {
                     finish(client, "TIMEOUT 가맹점 설정 대기 시간 초과");
                 }

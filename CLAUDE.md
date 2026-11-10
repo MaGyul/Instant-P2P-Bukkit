@@ -165,6 +165,7 @@ v1_21=intermediary·v26=Mojang 이름을 검사한다.
 - **동의**(`Consent`, `/p2p consent`): 공식 rev 3 / 가맹점 rev 1, `POST /api/v1/consent?token=` `{"rev","role":"host"}`. **자동 동의 금지**. 가맹점 공개 방은 동의 없으면 열지 않는다(F4와 같음). 문구는 원본 lang 그대로 + 서버판 안내(`consent.note`).
 - **다이얼로그 실제 확인(Paper 1.21.11 + 클라이언트 1.21.11)**: 접속한 op 플레이어가 `/p2p server franchise`를 치면 가맹점 약관이 스크롤되는 창으로 뜨고([동의]/[거부] 버튼), 버튼 클릭이 그 플레이어 권한으로 `/p2p server franchise accept|deny`를 실행한다. 동의하면 방이 가맹점 서버로 다시 열려 접속 중인 접속자는 끊긴다(서버 전환은 방을 다시 연다).
 - **다이얼로그**: `P2PSender.dialog(DialogSpec)` — Paper 1.21.7+ 플레이어만 `PaperDialogs`(Dialog API 있을 때만 로드), 나머지는 채팅 폴백. Fabric(1.21.6+)·Velocity는 아직 폴백.
+- **가맹점 공개 방 실제 확인**(Paper 26.3 + 가맹점 클라이언트 F4.0.2, MC 26.3): 방장 동의(`/p2p consent accept`, 서버에도 전송) 뒤 `publicRoom: true`로 열면 공개 방 연결이 거부 없이 붙고(`announcing`, 실패 0건 — 공식 서버는 점검 중 403), 클라이언트 방 목록에 제목·방장 닉네임·인원(0/20)·서버 버전(26.3, 호환 표시)이 보이며 목록에서 접속된다. 로비 태그는 `1.5`(앞 두 마디).
 - 가맹점 로비 ID: F4.0.1+는 모드 버전 앞 두 마디(`1.5.1`→`1.5`)만 해시 — 가맹점일 때만(`P2PConfig.lobbyVersion`). 공식은 전체 문자열.
 
 ## 클라이언트 입장 시험 (`gametest/`, `gametest26/`)
