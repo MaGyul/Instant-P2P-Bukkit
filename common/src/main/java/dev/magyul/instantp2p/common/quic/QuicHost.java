@@ -77,7 +77,7 @@ public final class QuicHost {
     private static final long NEGOTIATION_WAIT_MS = 4_000L;
     /** 랑데부 연결이 이만큼은 유지돼야 백오프를 처음으로 되돌린다 — 붙자마자 끊기는 루프에서 재접속이 몰리지 않게. */
     private static final long STABLE_MS = 20_000L;
-    /** 접속자가 떠난 뒤 서버 쪽 소켓을 닫기 전에 남은 데이터를 비우는 시간. */
+    /** 접속자가 떠난 뒤 서버 쪽 소켓을 닫기 전에 서버가 먼저 닫기를(FIN에 응답) 기다리며 남은 데이터를 비우는 최대 시간. 서버가 닫으면 그 즉시 닫는다. */
     private static final long CLIENT_LEFT_GRACE_MS = 400L;
     private static final int DIAL_TIMEOUT_MS = 5_000;
     /** 조인자의 2단계 시도(직결 2초 + 중계 30초)보다 길어야 방장이 먼저 포기하지 않는다. */
@@ -789,13 +789,20 @@ public final class QuicHost {
         // [1.3.0] 접속자가 먼저 떠나면 서버 쪽 소켓을 바로 닫지 않고 쓰기만 닫는다(FIN) — 서버가 보내던 데이터가 남은 채로
         // 닫으면 RST가 나가 Velocity 같은 프록시가 "Connection reset" 오류를 찍는다. Velocity는 FIN에 바로 닫지 않으므로(반닫기 허용)
         // 남은 데이터를 읽어 비울 짧은 시간({@link #CLIENT_LEFT_GRACE_MS}) 뒤 닫는다 — 이 사이 서버가 보낸 것은 읽어서 버린다.
+        // 서버가 FIN에 응답해 닫지 않으면(Velocity 3.x는 반닫기를 허용해 쓰기 실패 전까지 접속이 남는다 — 다음 keepalive까지 최대 수십 초,
+        // 그동안 같은 계정이 "이미 연결됨"으로 거부된다) 유예 뒤 RST로 끊어 상대가 바로 알게 한다.
+        Runnable forceClose = () -> {
+            if (closed.get()) return;
+            try { tcp.setSoLinger(true, 0); } catch (IOException ignored) {}
+            closeBoth.run();
+        };
         Runnable clientLeft = () -> {
             if (closed.get()) return;
             try { tcp.shutdownOutput(); } catch (IOException ignored) {}
             try {
-                watchdog.schedule(closeBoth, CLIENT_LEFT_GRACE_MS, TimeUnit.MILLISECONDS);
+                watchdog.schedule(forceClose, CLIENT_LEFT_GRACE_MS, TimeUnit.MILLISECONDS);
             } catch (RejectedExecutionException e) {
-                closeBoth.run();
+                forceClose.run();
             }
         };
         try {
