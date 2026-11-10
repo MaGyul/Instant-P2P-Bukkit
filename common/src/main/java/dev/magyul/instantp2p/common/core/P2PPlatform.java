@@ -73,6 +73,14 @@ public interface P2PPlatform {
     /** 서버 스레드에서 실행한다. */
     void runSync(Runnable task);
 
+    /**
+     * 서버 스레드. 서버 콘솔 권한으로 명령을 실행한다(예: 바닐라 {@code ban-ip}). 못 하는 플랫폼(Velocity)은 false —
+     * 그러면 {@code /p2p ban-ip}는 플러그인 자체 목록에만 기록한다.
+     */
+    default boolean runConsoleCommand(String command) {
+        return false;
+    }
+
     /** 서버 스레드. instant-p2p:room_state 페이로드를 접속자 전원에게 보낸다. */
     void broadcastRoomState(byte[] payload);
 }

@@ -5,6 +5,7 @@ import dev.magyul.instantp2p.common.auth.HostAccount;
 import dev.magyul.instantp2p.common.network.PacketByteBuf;
 import dev.magyul.instantp2p.common.network.packet.Moderation;
 import dev.magyul.instantp2p.common.network.packet.RoomState;
+import dev.magyul.instantp2p.common.i18n.I18n;
 import dev.magyul.instantp2p.common.tunnel.TunnelRegistry;
 import dev.magyul.instantp2p.common.core.ExpelManager;
 import dev.magyul.instantp2p.common.signaling.Roles;
@@ -51,6 +52,7 @@ public final class P2PCore {
     private final P2PBridge bridge;
     private final HostAccount account;
     private final RelayLinks relayLinks;
+    private final P2PBanList banList;
     private final BannedIps bannedIps = new BannedIps(java.nio.file.Path.of("banned-ips.json"));
     /** 방장 동의 기록(공개 방 / 공식 서버) */
     private final dev.magyul.instantp2p.common.signaling.Consent consent;
@@ -68,6 +70,7 @@ public final class P2PCore {
         this.expel = new ExpelManager(platform, this::broadcastRoomState);
         this.bridge = new P2PBridge(this);
         this.relayLinks = new RelayLinks(platform.dataFolder().resolve("relay-links.json"));
+        this.banList = new P2PBanList(platform.dataFolder().resolve("p2p-bans.json"));
         this.account = new HostAccount(platform.dataFolder(), platform.settings().serverUuid().toString());
         this.consent = new dev.magyul.instantp2p.common.signaling.Consent(platform.dataFolder());
         this.host = new HostController(this);
@@ -165,6 +168,99 @@ public final class P2PCore {
         }
         return false;
     }
+
+    /** 밴 사유를 안 줬을 때 — 바닐라와 같은 문구. */
+    public static final String DEFAULT_BAN_REASON = "Banned by an operator.";
+
+    /**
+     * 로그인 IP 밴 검사 — 막혀 있으면 사유, 아니면 null. 플러그인 자체 목록({@code /p2p ban-ip})과, 중계 강제 접속자가 전에 쓴
+     * 합성 주소가 서버 IP 밴 목록에 있는 경우({@link #isLinkedIpBanned})를 본다. 플랫폼이 사유와 함께 입장을 거부한다.
+     */
+    public String ipBanDenial(UUID player, InetAddress address) {
+        String addr = address != null ? address.getHostAddress() : null;
+        var hit = banList.find(player, addr);
+        if (hit.isPresent()) return hit.get().reason() == null || hit.get().reason().isBlank() ? DEFAULT_BAN_REASON : hit.get().reason();
+        if (isLinkedIpBanned(player, address)) return DEFAULT_BAN_REASON;
+        return null;
+    }
+
+    private static final java.util.regex.Pattern IPV4 = java.util.regex.Pattern.compile("(\\d{1,3}\\.){3}\\d{1,3}");
+
+    /**
+     * 서버 스레드. {@code /p2p ban-ip <플레이어|IP> [사유]} — 접속 중인 P2P 접속자를 이름으로, 또는 IP로 막는다.
+     * 중계 강제 접속자는 계정(UUID)으로 막는다(서버는 원래 IP를 모른다 — 어디에도 남지 않는다). 방송에 비치지 않게 IP는 출력하지 않는다.
+     * 일반 서버(Paper·Fabric)에서는 직결 접속자를 바닐라 {@code ban-ip}로도 올려 바닐라 목록과 같이 동작한다.
+     */
+    public void banIp(P2PSender sender, String target, String reason) {
+        String why = reason == null || reason.isBlank() ? DEFAULT_BAN_REASON : reason.strip();
+        UUID id = null;
+        String name = null, addr;
+        boolean relay = false;
+        if (IPV4.matcher(target).matches()) {
+            addr = target;
+        } else {
+            TunnelRegistry.Tunnel tunnel = null;
+            for (UUID p : tunnels.players().keySet()) {
+                String n = platform.playerName(p);
+                if (n != null && n.equalsIgnoreCase(target)) {
+                    id = p;
+                    name = n;
+                    tunnel = tunnels.byPlayer(p).orElse(null);
+                    break;
+                }
+            }
+            if (tunnel == null) {
+                sender.send(K_BAN + "not_guest", target);
+                return;
+            }
+            relay = tunnel.realIp() != null && tunnel.realIp().startsWith("relay-");
+            addr = tunnel.peerAddress().getHostAddress();
+        }
+        P2PBanList.Entry e = banList.add(relay ? id : null, name, addr, relay, why);
+        // 지금 접속 중인 해당 접속자 퇴장 — 중계는 계정, 직결은 같은 주소의 접속자 모두
+        for (UUID p : new java.util.ArrayList<>(tunnels.players().keySet())) {
+            var t = tunnels.byPlayer(p);
+            boolean hit = relay ? p.equals(id) : t.isPresent() && t.get().peerAddress().getHostAddress().equals(addr);
+            if (hit) platform.kick(p, K_BAN + "denied", why);
+        }
+        if (!relay) platform.runConsoleCommand("ban-ip " + addr + " " + why); // 바닐라 목록에도 (Velocity는 해당 없음)
+        sender.send(K_BAN + "done", "#" + e.id(), name != null ? name : "-", kindLabel(relay));
+    }
+
+    /** 서버 스레드. {@code /p2p pardon-ip <#번호|플레이어|UUID|IP>} */
+    public void pardonIp(P2PSender sender, String target) {
+        String t = target.startsWith("#") ? target.substring(1) : target;
+        java.util.List<P2PBanList.Entry> removed;
+        if (t.chars().allMatch(Character::isDigit) && !t.isEmpty() && target.startsWith("#")) {
+            removed = banList.removeById(Integer.parseInt(t));
+        } else {
+            removed = banList.remove(t);
+        }
+        for (P2PBanList.Entry e : removed) {
+            if (!e.relay() && e.addr() != null) platform.runConsoleCommand("pardon-ip " + e.addr());
+        }
+        sender.send(K_BAN + (removed.isEmpty() ? "none_found" : "pardoned"), removed.size());
+    }
+
+    /** 서버 스레드. {@code /p2p ban-list} — 번호·이름·종류·사유(IP는 보이지 않는다) */
+    public void banListTo(P2PSender sender) {
+        var all = banList.all();
+        if (all.isEmpty()) {
+            sender.send(K_BAN + "list_empty");
+            return;
+        }
+        sender.send(K_BAN + "list_header", all.size());
+        for (P2PBanList.Entry e : all) {
+            sender.send(K_BAN + "list_entry", "#" + e.id(), e.name() != null ? e.name() : "-", kindLabel(e.relay()),
+                    e.reason() == null || e.reason().isBlank() ? DEFAULT_BAN_REASON : e.reason());
+        }
+    }
+
+    private static String kindLabel(boolean relay) {
+        return I18n.stripLegacy(I18n.fallback(K_BAN + (relay ? "kind_relay" : "kind_direct")));
+    }
+
+    private static final String K_BAN = "instant-p2p-server.ban.";
 
     /** 테스트용으로 분리 (역할 갱신 네트워크 호출 없이) */
     void noteTunnelLogin(UUID player, InetAddress address) {

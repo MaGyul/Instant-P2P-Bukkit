@@ -22,10 +22,11 @@ final class InstantP2pListener implements Listener {
 
     @EventHandler
     public void onPreLogin(AsyncPlayerPreLoginEvent event) {
+        String banReason;
         if (!core.onPreLogin(event.getUniqueId(), event.getAddress())) {
             text.disallow(event, AsyncPlayerPreLoginEvent.Result.KICK_OTHER, "instant-p2p.msg.still_expelled");
-        } else if (core.isLinkedIpBanned(event.getUniqueId(), event.getAddress())) {
-            text.disallow(event, AsyncPlayerPreLoginEvent.Result.KICK_BANNED, "multiplayer.disconnect.ip_banned");
+        } else if ((banReason = core.ipBanDenial(event.getUniqueId(), event.getAddress())) != null) {
+            text.disallow(event, AsyncPlayerPreLoginEvent.Result.KICK_BANNED, "instant-p2p-server.ban.denied", banReason);
         } else if (core.isP2PFull(event.getUniqueId(), event.getName(), event.getAddress())) {
             text.disallow(event, AsyncPlayerPreLoginEvent.Result.KICK_FULL, P2PCore.SERVER_FULL);
         }

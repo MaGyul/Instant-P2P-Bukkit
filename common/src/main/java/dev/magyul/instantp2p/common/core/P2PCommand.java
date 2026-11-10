@@ -27,6 +27,7 @@ import java.util.stream.Collectors;
  *   /p2p max-players [on|off|set &lt;인원&gt;]   P2P 최대 인원 (설정 파일에 저장)
  *   /p2p server [official|franchise [accept|deny]]   방을 올릴 서버 (가맹점은 약관 동의, 설정 파일에 저장)
  *   /p2p consent [쪽|accept|deny|forget]   공개 방 방장 동의 문구 보기·동의 기록(자동 동의 없음)
+ *   /p2p ban-ip <플레이어|IP> [사유] / pardon-ip <#번호|플레이어|IP> / ban-list   P2P 접속자 IP 밴(프록시·중계 접속자용, IP는 출력하지 않는다)
  *   /p2p java [fix [always]|ignore|forget]   Java 취약점(CVE-2026-91403) 점검·우회 선택
  * </pre>
  * 권한: {@value #PERMISSION} (Fabric은 op).
@@ -35,7 +36,7 @@ public final class P2PCommand {
 
     public static final String NAME = "p2p";
     public static final String PERMISSION = "instantp2p.admin";
-    public static final List<String> SUBCOMMANDS = List.of("status", "login", "logout", "open", "close", "code", "newcode", "reload", "max-players", "server", "java", "consent");
+    public static final List<String> SUBCOMMANDS = List.of("status", "login", "logout", "open", "close", "code", "newcode", "reload", "max-players", "server", "java", "consent", "ban-ip", "pardon-ip", "ban-list");
     public static final List<String> MAX_PLAYERS_ACTIONS = List.of("on", "off", "set");
     public static final List<String> SERVERS = List.of("official", "franchise");
     public static final List<String> JAVA_ACTIONS = List.of("fix", "ignore", "forget");
@@ -71,6 +72,15 @@ public final class P2PCommand {
             case "server" -> server(core, sender, args);
             case "java" -> java(sender, args);
             case "consent" -> consent(core, sender, args);
+            case "ban-ip" -> {
+                if (args.length < 2) sender.send(K + "ban.usage");
+                else core.banIp(sender, args[1], args.length > 2 ? String.join(" ", java.util.Arrays.copyOfRange(args, 2, args.length)) : "");
+            }
+            case "pardon-ip" -> {
+                if (args.length < 2) sender.send(K + "ban.pardon_usage");
+                else core.pardonIp(sender, args[1]);
+            }
+            case "ban-list" -> core.banListTo(sender);
             default -> sender.send(K + "usage");
         }
     }

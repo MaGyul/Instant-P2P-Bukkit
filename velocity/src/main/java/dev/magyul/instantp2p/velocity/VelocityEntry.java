@@ -122,6 +122,9 @@ public final class VelocityEntry {
         if (!core.onPreLogin(player.getUniqueId())) {
             event.setResult(LoginEvent.ComponentResult.denied(
                     VelocityText.translatable("instant-p2p.msg.still_expelled")));
+        } else if (core.ipBanDenial(player.getUniqueId(), player.getRemoteAddress().getAddress()) != null) {
+            event.setResult(LoginEvent.ComponentResult.denied(VelocityText.translatable("instant-p2p-server.ban.denied",
+                    core.ipBanDenial(player.getUniqueId(), player.getRemoteAddress().getAddress()))));
         } else if (core.isP2PFull(player.getUniqueId(), player.getUsername(), player.getRemoteAddress().getAddress())) {
             // 프록시에는 정원 검사가 없다 — P2P 최대 인원만 여기서 막는다
             event.setResult(LoginEvent.ComponentResult.denied(VelocityText.translatable(P2PCore.SERVER_FULL)));

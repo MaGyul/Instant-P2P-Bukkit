@@ -129,6 +129,14 @@ final class FabricPlatform implements P2PPlatform {
     }
 
     @Override
+    public boolean runConsoleCommand(String command) {
+        MinecraftServer s = server;
+        if (s == null) return false;
+        s.getCommands().performPrefixedCommand(s.createCommandSourceStack(), command);
+        return true;
+    }
+
+    @Override
     public void notifyAdmins(String translationKey, Object... args) {
         LOGGER.info(I18n.stripLegacy(I18n.formatLog(translationKey, args))); // 콘솔에는 서식 코드 없이
         MinecraftServer s = server;

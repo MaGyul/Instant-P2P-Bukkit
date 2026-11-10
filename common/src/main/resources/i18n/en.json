@@ -155,7 +155,7 @@
   "instant-p2p.msg.signaling_unreachable": "§cServer maintenance §f(signaling failed) §c- retrying; players may not connect until it recovers",
   "instant-p2p.msg.signaling_recovered": "§aReconnected to the signaling server",
   "instant-p2p.msg.ip_restore_unavailable": "§cPlayer IP restoration is not supported on this server version and has been disabled. Connections still work. Please report this to the developer with your server type and version.",
-  "instant-p2p-server.usage": "§e/p2p <status|login|logout|open|close|code|newcode|reload|max-players|server|java|consent>",
+  "instant-p2p-server.usage": "§e/p2p <status|login|logout|open|close|code|newcode|reload|max-players|server|java|consent|ban-ip|pardon-ip|ban-list>",
   "instant-p2p-server.status.account": "§7Account: §f%s",
   "instant-p2p-server.status.pending": "§7Account: §ewaiting for login §7(/p2p login to see the code again)",
   "instant-p2p-server.status.logged_out": "§7Account: §cnot logged in §7(/p2p login)",
@@ -280,5 +280,17 @@
   "instant-p2p-server.consent.title": "§lHost consent",
   "instant-p2p-server.public.paused": "§ePublic room list unavailable: %s §7(rechecking every %s min; invite-code rooms stay open)",
   "instant-p2p-server.public.refused": "§eThe server refused the public room: %s §7(fix the cause, then /p2p close → /p2p open)",
-  "multiplayer.disconnect.ip_banned": "Your IP address is banned from this server."
+  "multiplayer.disconnect.ip_banned": "Your IP address is banned from this server.",
+  "instant-p2p-server.ban.usage": "§e/p2p ban-ip <player|IP> [reason]",
+  "instant-p2p-server.ban.pardon_usage": "§e/p2p pardon-ip <#id|player|IP>  (ids: /p2p ban-list)",
+  "instant-p2p-server.ban.done": "§aBanned: %s %s (%s). §7Pardon it by id with /p2p pardon-ip. IPs are never shown.",
+  "instant-p2p-server.ban.not_guest": "§cNot a connected P2P guest: %s §7(names only work for guests that joined through the tunnel; you can also give an IP)",
+  "instant-p2p-server.ban.denied": "§cYou are banned from this server: %s",
+  "instant-p2p-server.ban.pardoned": "§aPardoned %s ban(s).",
+  "instant-p2p-server.ban.none_found": "§eNo matching ban. /p2p ban-list",
+  "instant-p2p-server.ban.list_header": "§bP2P bans (%s)",
+  "instant-p2p-server.ban.list_entry": "§7%s §f%s §7(%s) §7— %s",
+  "instant-p2p-server.ban.list_empty": "§aThe P2P ban list is empty.",
+  "instant-p2p-server.ban.kind_direct": "direct",
+  "instant-p2p-server.ban.kind_relay": "relay·account"
 }
