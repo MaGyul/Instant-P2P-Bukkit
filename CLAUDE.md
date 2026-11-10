@@ -233,6 +233,13 @@ Fabric 클라이언트 GameTest는 사람 입력을 막아 AuthMe 로그인이 �
 - kwik은 연결 종료 뒤 sender 스레드에서 `Statistics`/`SendStatistics`를 처음 로드한다. Spigot은 비활성화 때 jar를 닫아
   `zip file closed`가 나므로 `QuicHost.start`에서 미리 로드한다.
 
+### P2P 자체 IP 밴 (`/p2p ban-ip|pardon-ip|ban-list`)
+- `P2PBanList`(`p2p-bans.json`): 프록시(Velocity)엔 IP 밴 목록이 없고 중계 강제 접속자는 서버 쪽 주소가 접속마다 바뀌어 바닐라 IP 밴으로 못 막는다. **중계 접속자는 계정(UUID)으로, 직결은 주소로** 막는다.
+  로그인 검사는 `P2PCore.ipBanDenial`(자체 목록 + 바닐라 `banned-ips.json`에 걸린 중계 합성 주소 연동), 플랫폼은 사유와 함께 거부(`instant-p2p-server.ban.denied`).
+- 표시: 번호(`#n`) + 주소. 중계는 합성 주소(원래 IP는 서버도 모르고 어디에도 안 남는다), 직결은 실제 IP(직결은 IP가 보일 것을 감안하고 접속한다고 합의). 해제는 `#번호|이름|IP`.
+- 일반 서버(Paper·Fabric): 직결 밴은 `P2PPlatform.runConsoleCommand`로 바닐라 `ban-ip`/`pardon-ip`에도 같이 올린다(바닐라 목록과 동기). Velocity는 해당 없음. 바닐라 `/ban-ip`를 직접 써도 중계 접속자 연동 차단은 그대로 동작.
+- Velocity 4.2.1 + Fabric 백엔드에서 확인: 밴 → 즉시 퇴장 → 새 합성 주소로 재접속해도 사유와 함께 거부, 다른 계정 영향 없음, `pardon-ip #1` 뒤 재입장.
+
 ### 터널 닫기 (Velocity에서 확인)
 - 접속자가 먼저 떠나면 서버 쪽 소켓을 바로 `close()`하지 않는다: 쓰기만 닫고(FIN) `CLIENT_LEFT_GRACE_MS`(400ms) 동안 서버가 보내는 것을 읽어 버린 뒤 닫는다. 바로 닫으면 읽지 않은 데이터 때문에 RST가 나가
   Velocity가 `exception encountered in ClientPlaySessionHandler: Connection reset` ERROR를 찍는다(Paper는 조용히 "Disconnected"). Velocity는 FIN에 바로 닫지 않는다(반닫기 허용). 개선 뒤 5회 퇴장·재입장에서 0건.

@@ -33,6 +33,7 @@ jar 하나(`instant-p2p-server-<버전>.jar`)를 서버에 넣으면 됩니다. 
 | `/p2p code` / `newcode` | 초대 코드 보기 / 새로 만들기(열려 있으면 새 코드로 다시 엶) |
 | `/p2p max-players [on\|off\|set <인원>]` | P2P 최대 인원 — 켜면 P2P 접속은 서버 정원 대신 이 인원으로 막음(서버 정원 이하, 설정 파일에 저장) |
 | `/p2p server [official\|franchise]` | 방을 올릴 서버 — 본점(공식) 또는 가맹점(사설). 가맹점은 약관 동의 후, 설정 파일에 저장 |
+| `/p2p ban-ip <플레이어\|IP> [사유]` / `pardon-ip <#번호\|이름\|IP>` / `ban-list` | P2P 접속자 IP 밴 — 프록시(Velocity)와 중계 강제 접속자용. 중계 접속자는 계정으로 막고, 일반 서버에서는 바닐라 `ban-ip`에도 같이 올립니다 |
 | `/p2p consent [accept\|deny\|forget]` | 공개 방 방장 동의 — 문구를 읽고 직접 동의해야 기록됩니다(자동 동의 없음). MC 1.21.6+ 플레이어에게는 스크롤되는 창으로 보입니다 |
 | `/p2p java [fix [always]\|ignore\|forget]` | Java 취약점(CVE-2026-91403) 점검 — 패치 안 된 Java면 방 열기를 막습니다. `fix`는 문제 인증서를 서버 프로세스 전체의 TLS 신뢰 목록에서 뺍니다(다른 플러그인 포함, 운영자가 고를 때만) |
 | `/p2p reload` | 설정 파일 다시 읽기 — 열려 있는 방에 바로 반영(`udpPort`는 다시 열어야, `serverUuid`는 재시작해야 적용) |
