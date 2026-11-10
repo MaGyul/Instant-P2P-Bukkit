@@ -224,7 +224,7 @@ public final class P2PCore {
             if (hit) platform.kick(p, K_BAN + "denied", why);
         }
         if (!relay) platform.runConsoleCommand("ban-ip " + addr + " " + why); // 바닐라 목록에도 (Velocity는 해당 없음)
-        sender.send(K_BAN + "done", "#" + e.id(), name != null ? name : "-", kindLabel(relay));
+        sender.send(K_BAN + "done", "#" + e.id(), name != null ? name : "-", kindLabel(relay), shownAddr(e));
     }
 
     /** 서버 스레드. {@code /p2p pardon-ip <#번호|플레이어|UUID|IP>} */
@@ -251,9 +251,14 @@ public final class P2PCore {
         }
         sender.send(K_BAN + "list_header", all.size());
         for (P2PBanList.Entry e : all) {
-            sender.send(K_BAN + "list_entry", "#" + e.id(), e.name() != null ? e.name() : "-", kindLabel(e.relay()),
+            sender.send(K_BAN + "list_entry", "#" + e.id(), e.name() != null ? e.name() : "-", kindLabel(e.relay()), shownAddr(e),
                     e.reason() == null || e.reason().isBlank() ? DEFAULT_BAN_REASON : e.reason());
         }
+    }
+
+    /** 화면에 보일 주소 — 중계 접속자의 합성 주소는 보여도 되지만(원래 IP가 아니다), 직결 접속자의 실제 IP는 가린다. */
+    private static String shownAddr(P2PBanList.Entry e) {
+        return e.relay() && e.addr() != null ? e.addr() : "***";
     }
 
     private static String kindLabel(boolean relay) {
