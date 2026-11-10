@@ -26,6 +26,24 @@ class PublicRoomsWireTest {
     }
 
     @Test
+    void franchiseLobbyUsesFirstTwoVersionSegments() {
+        assertEquals("1.5", P2PConfig.lobbyVersion("1.5.1"));
+        assertEquals("1.4", P2PConfig.lobbyVersion("1.4.3+F3.3"));
+        assertEquals("2", P2PConfig.lobbyVersion("2"));
+        SignalingServer before = P2PConfig.server();
+        try {
+            P2PConfig.useServer(SignalingServer.OFFICIAL);
+            String official15 = P2PConfig.publicRoomsLobbyId("normal", 0, "1.5");
+            String official151 = P2PConfig.publicRoomsLobbyId("normal", 0, "1.5.1");
+            assertNotEquals(official15, official151); // 공식은 전체 문자열
+            P2PConfig.useServer(SignalingServer.FRANCHISE);
+            assertEquals(official15, P2PConfig.publicRoomsLobbyId("normal", 0, "1.5.1")); // 가맹점은 1.5
+        } finally {
+            P2PConfig.useServer(before);
+        }
+    }
+
+    @Test
     void shardGolden() {
         assertEquals(1, P2PConfig.publicRoomShardFor("ABCDEFGHJK"));
         assertEquals(1, P2PConfig.publicRoomShardFor("2345678923"));

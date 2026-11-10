@@ -114,7 +114,14 @@ public final class P2PConfig {
     }
 
     private static String versionTag(String modVersion) {
-        return sha256Prefix8(modVersion);
+        // [1.3.0] 가맹점 F4.0.1+는 로비 ID에 모드 버전의 앞 두 마디만 쓴다(1.5.1 → 1.5). 공식 서버는 전체 문자열 그대로.
+        return sha256Prefix8(server() == SignalingServer.FRANCHISE ? lobbyVersion(modVersion) : modVersion);
+    }
+
+    /** 가맹점 로비용 버전: {@code [.+-]}로 나눈 앞 두 마디({@code 1.5.1} → {@code 1.5}). 마디가 둘 미만이면 그대로. */
+    static String lobbyVersion(String v) {
+        String[] p = v.split("[.+-]");
+        return p.length >= 2 ? p[0] + "." + p[1] : v;
     }
 
     private static String sha256Prefix8(String s) {
