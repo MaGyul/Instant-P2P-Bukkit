@@ -151,7 +151,7 @@ public final class P2PCore {
     /**
      * 중계 강제 접속자의 계정이 전에 쓴 합성 주소 중 IP 밴된 것이 있으면 true — 플랫폼이 IP 밴 거부
      * ({@code multiplayer.disconnect.ip_banned})로 입장을 막는다. 중계 강제 접속자의 서버 쪽 주소는 접속할 때마다 바뀌어
-     * {@code /ban-ip}만으로는 재접속이 안 막히기 때문이다(원본은 중계 접속자 전원을 TURN IP 하나로 취급해 전원이 막힌다).
+     * {@code /ban-ip}만으로는 재접속이 안 막히기 때문이다(원본 1.5.1은 중계 접속자의 실제 IP를 몰라 {@code /ban-ip}가 거부되고 계정 밴만 된다).
      * 직결 접속자는 건드리지 않는다(바닐라 IP 밴이 그대로 동작).
      */
     public boolean isLinkedIpBanned(UUID player, InetAddress address) {
