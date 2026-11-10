@@ -64,6 +64,7 @@ public class P2PBridge {
             h.close();
             host = null;
         }
+        core.evidence().clear(); // 신고 증거용 채팅은 방과 함께 버린다
         unpublishPublicRoom();
     }
 

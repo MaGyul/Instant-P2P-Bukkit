@@ -494,6 +494,22 @@ public final class QuicHost {
 
     /** 서버가 보낸 것: join(새 조인자) / leave(조인자가 떠남) / sid가 붙은 후보. */
     private void handleRendezvous(String json) {
+        // [1.3.1] 신고 증거 조회(원본 1.5) — 공개 방 로비 연결로 온다
+        String cq = VillasMsg.object(json, "chatquery");
+        if (cq != null) {
+            answerChatQuery(cq);
+            return;
+        }
+        String sq = VillasMsg.object(json, "signquery");
+        if (sq != null) {
+            answerWorldQuery(sq, false);
+            return;
+        }
+        String bq = VillasMsg.object(json, "bookquery");
+        if (bq != null) {
+            answerWorldQuery(bq, true);
+            return;
+        }
         String join = VillasMsg.object(json, "join");
         if (join != null) {
             onJoin(join);
@@ -521,6 +537,82 @@ public final class QuicHost {
             agent.addRemote(c);
             theirs.add(c);
         }
+    }
+
+    // ── [1.3.1] 신고 증거 조회 ────────────────────────────────────────────────
+
+    private volatile long chatAnswerWindow;
+    private final java.util.concurrent.atomic.AtomicInteger chatAnswers = new java.util.concurrent.atomic.AtomicInteger();
+    private volatile long worldAnswerWindow;
+    private final java.util.concurrent.atomic.AtomicInteger worldAnswers = new java.util.concurrent.atomic.AtomicInteger();
+
+    /**
+     * 신고를 처리하는 서버가 이 방의 채팅 구간을 묻는다 — 신고자가 낸 채팅이 방장 기록과 맞는지 대조한다.
+     * 구간은 10분 이하만, 분당 6회까지만 답한다(남의 방 채팅을 긁어 가는 통로가 되지 않게 — 원본과 같음).
+     */
+    private void answerChatQuery(String cq) {
+        String id = VillasMsg.field(cq, "id");
+        if (id == null || !id.matches("[0-9a-z]{1,32}")) return;
+        long from, to;
+        try {
+            from = Long.parseLong(VillasMsg.field(cq, "from"));
+            to = Long.parseLong(VillasMsg.field(cq, "to"));
+        } catch (RuntimeException e) {
+            return;
+        }
+        if (to < from || to - from > 600_000) return;
+        long now = System.currentTimeMillis();
+        if (now - chatAnswerWindow > 60_000) {
+            chatAnswerWindow = now;
+            chatAnswers.set(0);
+        }
+        if (chatAnswers.incrementAndGet() > 6) return;
+        worker.execute(() -> {
+            String lines = core.evidence().chatWindowJson(from, to);
+            WebSocketClient ws = lobby;
+            if (ws != null) ws.send("{\"chatreply\":{\"id\":\"" + id + "\",\"lines\":" + lines + "}}");
+            LOG.info("[host] 신고 증거 조회(채팅)에 답했다 — {}분 구간", Math.max(1, (to - from) / 60_000));
+        });
+    }
+
+    /** 표지판(books=false)·책(books=true) 조회 — 신고에 실린 내용이 방장 월드에 실제로 있는지 대조한다. 분당 6회. */
+    private void answerWorldQuery(String q, boolean books) {
+        String id;
+        com.google.gson.JsonArray items;
+        try {
+            com.google.gson.JsonObject o = com.google.gson.JsonParser.parseString(q).getAsJsonObject();
+            id = o.get("id").getAsString();
+            items = o.getAsJsonArray("items");
+        } catch (RuntimeException e) {
+            return;
+        }
+        if (id == null || !id.matches("[0-9a-z]{1,32}") || items == null || items.isEmpty() || items.size() > 200) return;
+        long now = System.currentTimeMillis();
+        if (now - worldAnswerWindow > 60_000) {
+            worldAnswerWindow = now;
+            worldAnswers.set(0);
+        }
+        if (worldAnswers.incrementAndGet() > 6) return;
+        final String qid = id;
+        final com.google.gson.JsonArray qitems = items;
+        worker.execute(() -> {
+            com.google.gson.JsonArray ans;
+            try {
+                ans = books ? core.platform().bookHashes(qitems) : core.platform().signTexts(qitems);
+            } catch (Throwable t) {
+                LOG.debug("[host] 신고 증거 조회 처리 실패: {}", t.toString());
+                return;
+            }
+            WebSocketClient ws = lobby;
+            if (ws == null) return;
+            com.google.gson.JsonObject reply = new com.google.gson.JsonObject();
+            reply.addProperty("id", qid);
+            reply.add("items", ans);
+            com.google.gson.JsonObject msg = new com.google.gson.JsonObject();
+            msg.add(books ? "bookreply" : "signreply", reply);
+            ws.send(msg.toString());
+            LOG.info("[host] 신고 증거 조회({})에 답했다 — 항목 {}개 중 {}개", books ? "책" : "표지판", qitems.size(), ans.size());
+        });
     }
 
     private void onJoin(String join) {

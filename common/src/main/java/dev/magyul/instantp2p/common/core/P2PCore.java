@@ -60,6 +60,8 @@ public final class P2PCore {
     /** 가맹점 서버 상태 보고 — 가맹점 서버일 때만 보낸다 */
     private final Presence presence;
     private volatile boolean ipRestoreUnavailable;
+    /** [1.3.1] 신고 증거 조회용 채팅 기록(메모리) */
+    private final ReportEvidence evidence = new ReportEvidence();
     /** 터널로 로그인 중인 UUID → 기록 시각. 정원 검사 이벤트에 주소가 없는 플랫폼(Paper)이 쓴다. */
     private final Map<UUID, Long> tunnelLogins = new ConcurrentHashMap<>();
 
@@ -110,6 +112,16 @@ public final class P2PCore {
     }
 
     public P2PPlatform platform() { return platform; }
+    public ReportEvidence evidence() { return evidence; }
+
+    /**
+     * [1.3.1] 방 안 채팅 한 줄을 신고 증거용으로 남긴다(방이 열려 있을 때만). {@code text}는 받는 쪽에 보이는 문장.
+     * 어느 스레드에서든 부를 수 있다. 메모리에만 두고 시그널링 서버가 물을 때만 나간다.
+     */
+    public void recordChat(String from, String text) {
+        if (host.state() != HostController.RoomState.OPEN) return;
+        evidence.addChat(from, text);
+    }
     public P2PSettings settings() { return platform.settings(); }
     public TunnelRegistry tunnels() { return tunnels; }
     public ExpelManager expel() { return expel; }

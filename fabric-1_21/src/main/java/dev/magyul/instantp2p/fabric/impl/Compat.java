@@ -15,6 +15,15 @@ final class Compat {
 
     private Compat() {}
 
+    /** 표지판 앞면·뒷면 글(줄마다 평문). */
+    static java.util.List<String> signLines(net.minecraft.world.level.block.entity.SignBlockEntity sign) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        for (net.minecraft.world.level.block.entity.SignText face : new net.minecraft.world.level.block.entity.SignText[]{sign.getFrontText(), sign.getBackText()}) {
+            for (net.minecraft.network.chat.Component line : face.getMessages(false)) out.add(line.getString());
+        }
+        return out;
+    }
+
     static void registerPayloads() {
         PayloadTypeRegistry.playS2C().register(Payloads.RoomStatePayload.TYPE, Payloads.RoomStatePayload.CODEC);
         PayloadTypeRegistry.playC2S().register(Payloads.ModerationPayload.TYPE, Payloads.ModerationPayload.CODEC);

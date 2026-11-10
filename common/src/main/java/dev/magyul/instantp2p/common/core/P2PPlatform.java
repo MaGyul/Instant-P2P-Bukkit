@@ -83,4 +83,21 @@ public interface P2PPlatform {
 
     /** 서버 스레드. instant-p2p:room_state 페이로드를 접속자 전원에게 보낸다. */
     void broadcastRoomState(byte[] payload);
+
+    /**
+     * [1.3.1] 신고 증거 조회 — 좌표 목록 {@code [{i,d,x,y,z}]}의 지금 표지판 글을 {@code [{i,text}]}로 답한다(글이 없거나
+     * 불러오지 않은 청크는 건드리지 않고 항목을 뺀다). <b>아무 스레드</b>에서 불리므로 월드 읽기는 {@link ReportEvidence#onServerThread}로
+     * 서버 스레드에 넘길 것. 월드가 없는 플랫폼(Velocity)은 빈 배열.
+     */
+    default com.google.gson.JsonArray signTexts(com.google.gson.JsonArray items) {
+        return new com.google.gson.JsonArray();
+    }
+
+    /**
+     * [1.3.1] 신고 증거 조회 — 책 목록 {@code [{i,src,...}]}의 지금 해시를 {@code [{i,h}]}로 답한다
+     * ({@link ReportEvidence#bookHash}). 스레드 규칙은 {@link #signTexts}와 같다.
+     */
+    default com.google.gson.JsonArray bookHashes(com.google.gson.JsonArray items) {
+        return new com.google.gson.JsonArray();
+    }
 }

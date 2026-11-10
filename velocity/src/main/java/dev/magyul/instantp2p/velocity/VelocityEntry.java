@@ -143,6 +143,13 @@ public final class VelocityEntry {
         }
     }
 
+    /** [1.3.1] 신고 증거용 채팅 기록 — 프록시가 본 채팅만(백엔드가 따로 렌더하는 서식은 알 수 없어 기본 "<이름> 내용"). */
+    @Subscribe
+    public void onChat(com.velocitypowered.api.event.player.PlayerChatEvent event) {
+        if (core == null || !event.getResult().isAllowed()) return;
+        core.recordChat(event.getPlayer().getUsername(), "<" + event.getPlayer().getUsername() + "> " + event.getMessage());
+    }
+
     @Subscribe
     public void onDisconnect(DisconnectEvent event) {
         if (core == null) return;

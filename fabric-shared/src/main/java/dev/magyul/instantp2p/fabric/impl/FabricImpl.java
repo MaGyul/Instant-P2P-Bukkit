@@ -124,6 +124,15 @@ public final class FabricImpl implements FabricEntry.Impl {
 
         ServerMessageEvents.ALLOW_GAME_MESSAGE.register(this::appendJoinSuffix);
 
+        // [1.3.1] 신고 증거용 채팅 기록 — 받는 쪽에 보이는 문장("<이름> 내용")을 메모리에 남긴다
+        ServerMessageEvents.CHAT_MESSAGE.register((message, sender, params) -> {
+            try {
+                core.recordChat(sender.getName().getString(), params.decorate(message.decoratedContent()).getString());
+            } catch (Throwable t) {
+                // 부가 기능 — 채팅 처리에는 영향을 주지 않는다
+            }
+        });
+
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             ServerPlayer player = handler.player;
             // JOIN은 입장 메시지보다 먼저 온다 — 여기서 suffix를 지우면 안 된다.

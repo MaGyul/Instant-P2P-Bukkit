@@ -159,7 +159,7 @@ v1_21=intermediary·v26=Mojang 이름을 검사한다.
 - **핸드셰이크 거부**(`HandshakeRejectedException`, `X-Reject`/`X-Reject-Until`): `QuicHost.REJECT_REASONS`의 코드는 재접속 중단 + 관리자 알림, `cooldown`은 until까지 대기.
   방장 URL에 `ClientInfo`(`v`,`mc`,`j`,`b`=플러그인 jar SHA-256) — **사실만 보낸다**(위조 금지). `unofficial`/`too-old`가 나오면 등록은 운영자 협의 사항.
 - **공개 방 프로토콜**: 방장 WS로 `room`(+`opts.signed`는 `server.properties`의 enforce-secure-profile), `acl`, `peer(s)`, `bye`, `hostlog` 해시 체인(`HostLog`, 하트비트 5초 후 30초 주기 —
-  끊기면 서버가 `nolog`로 공개 목록에서 뺀다), 서버 `notice`(unsigned/title/quarantine/nolog) 처리. 월드 이벤트·`chatquery`/`signquery`/`bookquery` 응답은 아직 없음.
+  끊기면 서버가 `nolog`로 공개 목록에서 뺀다), 서버 `notice`(unsigned/title/quarantine/nolog) 처리. 월드 이벤트 기록(블록·사망 등)은 아직 없음.
 - **JreGuard**(CVE-2026-91403): 신뢰 저장소에 `emSign ECC Root CA - G3`/`AAA Certificate Services` 루트가 있고 `blocked.certs`가 갱신판(≥70줄)이 아니면 UNPATCHED → 방 열기 차단.
   `/p2p java fix [always]`는 서버 프로세스 전체의 기본 SSLContext에 영향을 주므로 **운영자가 고를 때만**. `P2PCore` 생성자 맨 앞에서 init(다른 HTTP 클라이언트보다 먼저), `WebSocketClient`는 `SSLContext.getDefault()`에서 직접 소켓 공장을 받는다.
 - **동의**(`Consent`, `/p2p consent`): 공식 rev 3 / 가맹점 rev 1, `POST /api/v1/consent?token=` `{"rev","role":"host"}`. **자동 동의 금지**. 가맹점 공개 방은 동의 없으면 열지 않는다(F4와 같음). 문구는 원본 lang 그대로 + 서버판 안내(`consent.note`).
@@ -185,7 +185,13 @@ Fabric 클라이언트 GameTest는 사람 입력을 막아 AuthMe 로그인이 �
 - **장시간 연결 유지(1.5.1)**: `QuicIce.startReflexRefresh`(30초마다 STUN으로 공인 주소 재확인 → `QuicHost.onReflexive`가 후보를 새로 만든다), `startRelayWatch`(60초마다 `relaySelfCheck` — 자기 중계 주소로 보낸 STUN 요청이 돌아오는지;
   한 번 통과한 뒤 연속 3번 실패하면 `TurnAllocation.recycle`). 이 서버(공식 coturn)에서는 첫 점검(방 연 지 8초)은 실패하고 이후 통과한다 — 한 번도 통과한 적 없으면 할당을 건드리지 않는다(원본과 같음, 5번 실패하면 안내 로그 한 번).
   `TurnAllocation`: 권한 256·채널 128 상한(45초 이상 안 쓴 채널부터 비움). `ServerConnectionConfig`를 명시하고 `retryRequired(true)`(원본과 같음) — 직결·중계 입장 확인.
-- 미구현(원본 1.5의 신고 기능): 시그널링 서버가 방장에게 묻는 `chatquery`/`signquery`/`bookquery`에 답하지 않는다.
+- **신고 증거 조회(1.3.1)**: 시그널링 서버가 공개 방 로비 연결로 `chatquery`/`signquery`/`bookquery`를 묻는다(`QuicHost.answerChatQuery`/`answerWorldQuery`, 분당 6회·채팅 구간 10분 이하, 응답은 `chatreply`/`signreply`/`bookreply`).
+  `ReportEvidence`(common)가 채팅 기록(메모리만, 600줄·3일, 방이 열려 있는 동안 방 안 채팅만, 방을 닫으면 비움)·표지판 글 규칙(앞+뒤 줄을 trim해 `" / "`, 256자)·책 해시(`kind
+title
+author` + ``쪽, SHA-256 hex — 원본 클라이언트와 글자 하나까지 같아야 대조가 맞는다)를 가진다.
+  월드 읽기는 플랫폼 몫(`P2PPlatform.signTexts/bookHashes`, `ReportEvidence.onServerThread`로 서버 스레드 5초): Paper/Spigot `WorldEvidence`(Bukkit API), Fabric `FabricEvidence`(+ 모듈별 `Compat.signLines` — 26.3은 `getText(SignTextSlot)`, `getMessages`가 배열→List라 v26은 리플렉션), Velocity는 월드가 없어 채팅만.
+  채팅은 받는 쪽에 보이는 문장: Paper `AsyncChatEvent` 렌더러 결과, Spigot `AsyncPlayerChatEvent` 포맷, Fabric `ChatType.Bound.decorate`, Velocity `<이름> 내용`. 불러오지 않은 청크는 건드리지 않는다.
+  **확인**: Paper 26.3에서 표지판 글·책 해시(원본 규칙으로 계산한 기대값과 일치)를 월드에서 읽는 것 확인, 가맹점 서버에 실제 신고를 접수시켰지만(`신고가 접수되었습니다`) 몇 분간 조회는 오지 않았다(운영자가 신고를 열 때 올 것으로 추정) — 서버 쪽 응답 처리는 미확인. 원본 `/report`는 클라이언트 명령이라 시험 제어 파일의 `chat /report …`로는 안 된다(일반 채팅으로 나간다) — 창에서 직접 입력.
 
 ## 건드리면 안 되는 것 (원본 모드 1.4.3과의 호환)
 

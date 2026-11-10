@@ -134,6 +134,16 @@ final class PaperPlatform implements P2PPlatform {
     }
 
     @Override
+    public com.google.gson.JsonArray signTexts(com.google.gson.JsonArray items) {
+        return dev.magyul.instantp2p.common.core.ReportEvidence.onServerThread(this, () -> WorldEvidence.signTexts(items));
+    }
+
+    @Override
+    public com.google.gson.JsonArray bookHashes(com.google.gson.JsonArray items) {
+        return dev.magyul.instantp2p.common.core.ReportEvidence.onServerThread(this, () -> WorldEvidence.bookHashes(items));
+    }
+
+    @Override
     public void broadcastRoomState(byte[] payload) {
         Bukkit.getServer().sendPluginMessage(plugin, RoomState.ID, payload);
     }

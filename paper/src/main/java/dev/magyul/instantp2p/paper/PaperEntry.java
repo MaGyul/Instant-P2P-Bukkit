@@ -69,6 +69,7 @@ public final class PaperEntry extends JavaPlugin {
 
         Bukkit.getPluginManager().registerEvents(new InstantP2pListener(core, text), this);
         FullCheckListener.register(this, core);
+        ChatEvidence.register(this, core); // 신고 증거용 채팅 기록
 
         var command = getCommand("p2p");
         if (command != null) {

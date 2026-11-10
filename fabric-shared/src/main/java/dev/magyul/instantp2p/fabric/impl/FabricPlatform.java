@@ -171,6 +171,20 @@ final class FabricPlatform implements P2PPlatform {
     });
 
     @Override
+    public com.google.gson.JsonArray signTexts(com.google.gson.JsonArray items) {
+        MinecraftServer s = server;
+        if (s == null) return new com.google.gson.JsonArray();
+        return dev.magyul.instantp2p.common.core.ReportEvidence.onServerThread(this, () -> FabricEvidence.signTexts(s, items));
+    }
+
+    @Override
+    public com.google.gson.JsonArray bookHashes(com.google.gson.JsonArray items) {
+        MinecraftServer s = server;
+        if (s == null) return new com.google.gson.JsonArray();
+        return dev.magyul.instantp2p.common.core.ReportEvidence.onServerThread(this, () -> FabricEvidence.bookHashes(s, items));
+    }
+
+    @Override
     public void broadcastRoomState(byte[] payload) {
         MinecraftServer s = server;
         if (s == null) return;
